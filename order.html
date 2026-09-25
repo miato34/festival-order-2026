@@ -74,7 +74,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAh7xMGv5-J8pQ4iRKMUdgwYWjHl-EyLo8",
@@ -97,208 +97,208 @@
             if(duration > 0) setTimeout(() => modal.classList.add('hidden'), duration);
         }
 
-        if (!firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-            showAlert("설정 오류", "Firebase 설정이 필요합니다. 관리자에게 문의해주세요.", 0);
-            submitOrderBtn.disabled = true;
-        } else {
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            let configData = null;
-            
-            // 오류를 방지하기 위해 자동 승인으로 수정된 구문
-            async function fetchConfig() {
-                configData = {
-                    activeDay: "day1",
-                    dayTabs: [{ day: "day1", date: "2026-09-26" }]
-                };
-                submitOrderBtn.disabled = false;
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        let configData = null;
+
+        // 9/30~10/2 축제 3일간 날짜 자동 처리 구문 (테스트 기간에도 day1 자동 호환)
+        function fetchConfig() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            let currentDay = "day1";
+            if (todayStr === "2026-10-01") currentDay = "day2";
+            else if (todayStr === "2026-10-02") currentDay = "day3";
+
+            configData = {
+                activeDay: currentDay,
+                dayTabs: [
+                    { day: "day1", date: "2026-09-30" },
+                    { day: "day2", date: "2026-10-01" },
+                    { day: "day3", date: "2026-10-02" }
+                ]
+            };
+            submitOrderBtn.disabled = false;
+        }
+        fetchConfig();
+
+        const menuData = [
+            {
+                category: '🪑 자릿세',
+                items: [ { id: 'seat-charge', name: '1인', price: 3000 }]
+            },
+            {
+                category: '🍗 치킨(순살)',
+                items: [
+                    { id: 'fried-chicken', name: '스제치킨(후라이드)', price: 20900 },
+                    { id: 'yangnyeom-chicken', name: '양념치킨', price: 21900 },
+                    { id: 'supreme-yangnyeom-chicken', name: '뿌링클치킨', price: 21900 },
+                ]
+            },
+            {
+                category: '🍟 사이드',
+                items: [
+                    { id: 'fruit', name: '화채', price: 7900 },
+                    { id: 'tteokbokki', name: '떡볶이', price: 7900 },
+                    { id: 'takoyaki', name: '타꼬야끼', price: 7900 },
+                    { id: 'fries', name: '감자튀김', price: 6900 },
+                    { id: 'zero', name: '펩시제로', price: 2000 },
+                    { id: 'pepsi', name: '펩시', price: 2000 },
+                    { id: 'water', name: '물', price: 1000 },
+                ]
+            },
+            {
+                category: '🙋‍♂️호출',
+                items: [
+                    { id: 'employee', name: '직원 호출', price: 0},
+                    { id: 'seat', name: '합석 원해요', price: 0},
+                    { id: 'snack', name: '과자 리필', price: 0},
+                    { id: 'soju', name: '소주잔', price: 0},
+                    { id: 'glass', name: '종이컵', price: 0},
+                    { id: 'plate', name: '앞접시', price: 0},                        
+                    { id: 'tisue', name: '물티슈', price: 0},
+                    { id: 'spoon', name: '숟가락', price: 0},
+                    { id: 'chap', name: '젓가락', price: 0}
+                ]
             }
-            fetchConfig();
+        ];
 
-            const menuData = [
-                {
-                    category: '🪑 자릿세',
-                    items: [ { id: 'seat-charge', name: '1인', price: 3000 }]
-                },
-                {
-                    category: '🍗 치킨(순살)',
-                    items: [
-                        { id: 'fried-chicken', name: '스제치킨(후라이드)', price: 20900 },
-                        { id: 'yangnyeom-chicken', name: '양념치킨', price: 21900 },
-                        { id: 'supreme-yangnyeom-chicken', name: '뿌링클치킨', price: 21900 },
-                    ]
-                },
-                {
-                    category: '🍟 사이드',
-                    items: [
-                        { id: 'fruit', name: '화채', price: 7900 },
-                        { id: 'tteokbokki', name: '떡볶이', price: 7900 },
-                        { id: 'takoyaki', name: '타꼬야끼', price: 7900 },
-                        { id: 'fries', name: '감자튀김', price: 6900 },
-                        { id: 'zero', name: '펩시제로', price: 2000 },
-                        { id: 'pepsi', name: '펩시', price: 2000 },
-                        { id: 'water', name: '물', price: 1000 },
-                    ]
-                },
-                 {
-                    category: '🙋‍♂️호출',
-                    items: [
-                        { id: 'employee', name: '직원 호출', price: 0},
-                        { id: 'seat', name: '합석 원해요', price: 0},
-                        { id: 'snack', name: '과자 리필', price: 0},
-                        { id: 'soju', name: '소주잔', price: 0},
-                        { id: 'glass', name: '종이컵', price: 0},
-                        { id: 'plate', name: '앞접시', price: 0},                        
-                        { id: 'tisue', name: '물티슈', price: 0},
-                        { id: 'spoon', name: '숟가락', price: 0},
-                        { id: 'chap', name: '젓가락', price: 0}
-                    ]
+        const menuSection = document.getElementById('menu-section');
+        const menuItemTemplate = document.getElementById('menu-item-template');
+        const cart = {};
+    
+        menuSection.innerHTML = '<h2 class="text-2xl font-bold text-white mb-4" style="text-shadow: 1px 1px 3px black;">메뉴판</h2>'; 
+
+        menuData.forEach(categoryInfo => {
+            const categoryTitle = document.createElement('h3');
+            categoryTitle.className = 'text-xl font-bold text-white mt-8 mb-3';
+            categoryTitle.style.textShadow = '1px 1px 3px black';
+            categoryTitle.textContent = categoryInfo.category;
+            menuSection.appendChild(categoryTitle);
+
+            categoryInfo.items.forEach(item => {
+                const clone = menuItemTemplate.content.cloneNode(true);
+                clone.querySelector('h3').textContent = item.name;
+                if (item.price > 0) {
+                    clone.querySelector('p').textContent = `${item.price.toLocaleString()}원`;
+                } else {
+                    clone.querySelector('p').textContent = '';
                 }
-            ];
-
-            const menuSection = document.getElementById('menu-section');
-            const menuItemTemplate = document.getElementById('menu-item-template');
-            const cart = {};
-        
-            menuSection.innerHTML = '<h2 class="text-2xl font-bold text-white mb-4" style="text-shadow: 1px 1px 3px black;">메뉴판</h2>'; 
-
-            menuData.forEach(categoryInfo => {
-                const categoryTitle = document.createElement('h3');
-                categoryTitle.className = 'text-xl font-bold text-white mt-8 mb-3';
-                categoryTitle.style.textShadow = '1px 1px 3px black';
-                categoryTitle.textContent = categoryInfo.category;
-                menuSection.appendChild(categoryTitle);
-
-                categoryInfo.items.forEach(item => {
-                    const clone = menuItemTemplate.content.cloneNode(true);
-                    clone.querySelector('h3').textContent = item.name;
-                    if (item.price > 0) {
-                        clone.querySelector('p').textContent = `${item.price.toLocaleString()}원`;
-                    } else {
-                        clone.querySelector('p').textContent = '';
-                    }
-                    const [minusBtn, plusBtn] = clone.querySelectorAll('.quantity-change');
-                    const quantitySpan = clone.querySelector('.quantity');
-                    minusBtn.addEventListener('click', () => updateQuantity(item, -1, quantitySpan));
-                    plusBtn.addEventListener('click', () => updateQuantity(item, 1, quantitySpan));
-                    menuSection.appendChild(clone);
-                    cart[item.id] = { ...item, quantity: 0 };
-                });
+                const [minusBtn, plusBtn] = clone.querySelectorAll('.quantity-change');
+                const quantitySpan = clone.querySelector('.quantity');
+                minusBtn.addEventListener('click', () => updateQuantity(item, -1, quantitySpan));
+                plusBtn.addEventListener('click', () => updateQuantity(item, 1, quantitySpan));
+                menuSection.appendChild(clone);
+                cart[item.id] = { ...item, quantity: 0 };
             });
+        });
 
-            function updateQuantity(item, change, quantitySpan) {
-                const currentQuantity = cart[item.id].quantity;
-                if (currentQuantity + change >= 0) {
-                    cart[item.id].quantity += change;
-                    quantitySpan.textContent = cart[item.id].quantity;
-                    updateCart();
+        function updateQuantity(item, change, quantitySpan) {
+            const currentQuantity = cart[item.id].quantity;
+            if (currentQuantity + change >= 0) {
+                cart[item.id].quantity += change;
+                quantitySpan.textContent = cart[item.id].quantity;
+                updateCart();
+            }
+        }
+
+        const cartItemsDiv = document.getElementById('cart-items');
+        const totalPriceSpan = document.getElementById('total-price');
+
+        function updateCart() {
+            cartItemsDiv.innerHTML = '';
+            let total = 0;
+            let hasItems = false;
+            Object.values(cart).forEach(item => {
+                if (item.quantity > 0) {
+                    hasItems = true;
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'flex justify-between text-gray-800';
+                    const priceText = item.price > 0 ? `<span>${(item.price * item.quantity).toLocaleString()}원</span>` : '<span>-</span>';
+                    itemDiv.innerHTML = `<span>${item.name} x${item.quantity}</span>${priceText}`;
+                    cartItemsDiv.appendChild(itemDiv);
+                    total += item.price * item.quantity;
                 }
+            });
+            if (!hasItems) cartItemsDiv.innerHTML = '<p class="text-gray-500">장바구니가 비어있습니다.</p>';
+            totalPriceSpan.textContent = `${total.toLocaleString()}원`;
+        }
+
+        submitOrderBtn.addEventListener('click', async () => {
+            submitOrderBtn.disabled = true;
+
+            const activeDayInfo = configData.dayTabs.find(d => d.day === configData.activeDay) || configData.dayTabs[0];
+
+            const tableNumber = document.getElementById('table-number').value;
+            if (!tableNumber) {
+                showAlert("입력 오류", "테이블 번호를 입력해주세요.");
+                submitOrderBtn.disabled = false; return;
+            }
+            
+            const orderedItems = Object.values(cart).filter(item => item.quantity > 0);
+            if (orderedItems.length === 0) {
+                showAlert("입력 오류", "메뉴를 선택해주세요.");
+                submitOrderBtn.disabled = false; return;
             }
 
-            const cartItemsDiv = document.getElementById('cart-items');
-            const totalPriceSpan = document.getElementById('total-price');
-
-            function updateCart() {
-                cartItemsDiv.innerHTML = '';
-                let total = 0;
-                let hasItems = false;
-                Object.values(cart).forEach(item => {
-                    if (item.quantity > 0) {
-                        hasItems = true;
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'flex justify-between text-gray-800';
-                        const priceText = item.price > 0 ? `<span>${(item.price * item.quantity).toLocaleString()}원</span>` : '<span>-</span>';
-                        itemDiv.innerHTML = `<span>${item.name} x${item.quantity}</span>${priceText}`;
-                        cartItemsDiv.appendChild(itemDiv);
-                        total += item.price * item.quantity;
-                    }
-                });
-                if (!hasItems) cartItemsDiv.innerHTML = '<p class="text-gray-500">장바구니가 비어있습니다.</p>';
-                totalPriceSpan.textContent = `${total.toLocaleString()}원`;
+            const parsedTableNumber = parseInt(tableNumber, 10);
+            if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1 || parsedTableNumber > 26) {
+                showAlert("입력 오류", "테이블 번호는 1번부터 26번까지 입력해주세요.");
+                submitOrderBtn.disabled = false; return;
             }
 
-            submitOrderBtn.addEventListener('click', async () => {
-                submitOrderBtn.disabled = true;
+            try {
+                const q = query(collection(db, "orders"), 
+                    where("tableNumber", "==", parsedTableNumber),
+                    where("festivalDay", "==", activeDayInfo.day),
+                    where("status", "in", ["주문 접수 중", "요리 중", "서빙 완료"])
+                );
+                const querySnapshot = await getDocs(q);
+                
+                const newItems = orderedItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }));
 
-                const activeDayInfo = configData?.dayTabs.find(d => d.day === configData.activeDay);
-                if (!activeDayInfo || !activeDayInfo.date) {
-                    showAlert("주문 불가", "현재 주문 접수 시간이 아닙니다.");
-                    submitOrderBtn.disabled = false; return;
-                }
+                if (!querySnapshot.empty) {
+                    const existingOrderDoc = querySnapshot.docs[0];
+                    const existingData = existingOrderDoc.data();
+                    
+                    const newBatch = { acknowledged: false, items: newItems };
+                    const existingBatches = existingData.orderBatches || [{ acknowledged: true, items: existingData.items || [] }];
+                    const updatedBatches = [...existingBatches, newBatch];
+                    const newTotalPrice = updatedBatches.flat().flatMap(batch => batch.items).reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-                const tableNumber = document.getElementById('table-number').value;
-                if (!tableNumber) {
-                    showAlert("입력 오류", "테이블 번호를 입력해주세요.");
-                    submitOrderBtn.disabled = false; return;
+                    await updateDoc(existingOrderDoc.ref, {
+                        orderBatches: updatedBatches,
+                        totalPrice: newTotalPrice,
+                        timestamp: new Date(),
+                        isHighlighted: true,
+                        partySize: existingData.partySize || (existingData.orderBatches?.[0]?.items || []).filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0)
+                    });
+                    showAlert("추가 주문 완료!", "기존 주문에 메뉴가 추가되었습니다.", 2000);
+                } else {
+                    const firstBatch = { acknowledged: false, items: newItems };
+                    const totalPrice = firstBatch.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+                    await addDoc(collection(db, "orders"), {
+                        tableNumber: parsedTableNumber,
+                        orderBatches: [firstBatch],
+                        totalPrice: totalPrice,
+                        status: "주문 접수 중",
+                        timestamp: new Date(),
+                        startTime: new Date(),
+                        partySize: firstBatch.items.filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0),
+                        overtimeChargeApplied: false,
+                        festivalDay: activeDayInfo.day,
+                        isHighlighted: true
+                    });
+                    showAlert("주문 완료!", "주문이 성공적으로 접수되었습니다.", 2000);
                 }
                 
-                const orderedItems = Object.values(cart).filter(item => item.quantity > 0);
-                if (orderedItems.length === 0) {
-                    showAlert("입력 오류", "메뉴를 선택해주세요.");
-                    submitOrderBtn.disabled = false; return;
-                }
+                setTimeout(() => { window.location.reload(); }, 2100);
 
-                const parsedTableNumber = parseInt(tableNumber, 10);
-                if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1 || parsedTableNumber > 26) {
-                    showAlert("입력 오류", "테이블 번호는 1번부터 26번까지 입력해주세요.");
-                    submitOrderBtn.disabled = false; return;
-                }
-
-                try {
-                    const q = query(collection(db, "orders"), 
-                        where("tableNumber", "==", parsedTableNumber),
-                        where("festivalDay", "==", activeDayInfo.day),
-                        where("status", "in", ["주문 접수 중", "요리 중", "서빙 완료"])
-                    );
-                    const querySnapshot = await getDocs(q);
-                    
-                    const newItems = orderedItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }));
-
-                    if (!querySnapshot.empty) {
-                        const existingOrderDoc = querySnapshot.docs[0];
-                        const existingData = existingOrderDoc.data();
-                        
-                        const newBatch = { acknowledged: false, items: newItems };
-                        const existingBatches = existingData.orderBatches || [{ acknowledged: true, items: existingData.items || [] }];
-                        const updatedBatches = [...existingBatches, newBatch];
-                        const newTotalPrice = updatedBatches.flat().flatMap(batch => batch.items).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-                        await updateDoc(existingOrderDoc.ref, {
-                            orderBatches: updatedBatches,
-                            totalPrice: newTotalPrice,
-                            timestamp: new Date(),
-                            isHighlighted: true,
-                            partySize: existingData.partySize || (existingData.orderBatches?.[0]?.items || []).filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0)
-                        });
-                        showAlert("추가 주문 완료!", "기존 주문에 메뉴가 추가되었습니다.", 2000);
-                    } else {
-                        const firstBatch = { acknowledged: false, items: newItems };
-                        const totalPrice = firstBatch.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-                        await addDoc(collection(db, "orders"), {
-                            tableNumber: parsedTableNumber,
-                            orderBatches: [firstBatch],
-                            totalPrice: totalPrice,
-                            status: "주문 접수 중",
-                            timestamp: new Date(),
-                            startTime: new Date(),
-                            partySize: firstBatch.items.filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0),
-                            overtimeChargeApplied: false,
-                            festivalDay: activeDayInfo.day,
-                            isHighlighted: true
-                        });
-                        showAlert("주문 완료!", "주문이 성공적으로 접수되었습니다.", 2000);
-                    }
-                    
-                    setTimeout(() => { window.location.reload(); }, 2100);
-
-                } catch (e) {
-                    console.error("주문 처리 오류 상세 정보: ", e);
-                    showAlert("주문 실패", `오류가 발생했습니다. (코드: ${e.code})`);
-                    submitOrderBtn.disabled = false;
-                }
-            });
-        }
+            } catch (e) {
+                console.error("주문 처리 오류 상세 정보: ", e);
+                showAlert("주문 실패", `오류가 발생했습니다. (코드: ${e.code})`);
+                submitOrderBtn.disabled = false;
+            }
+        });
     </script>
 </body>
 </html>
