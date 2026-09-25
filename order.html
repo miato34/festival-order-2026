@@ -74,7 +74,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, doc, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getDatabase, ref, push, set, get } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAh7xMGv5-J8pQ4iRKMUdgwYWjHl-EyLo8",
@@ -98,10 +98,9 @@
         }
 
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        const db = getDatabase(app);
         let configData = null;
 
-        // 9/30~10/2 축제 3일간 날짜 자동 처리 구문 (테스트 기간에도 day1 자동 호환)
         function fetchConfig() {
             const todayStr = new Date().toISOString().split('T')[0];
             let currentDay = "day1";
@@ -246,28 +245,39 @@
             }
 
             try {
-                const q = query(collection(db, "orders"), 
-                    where("tableNumber", "==", parsedTableNumber),
-                    where("festivalDay", "==", activeDayInfo.day),
-                    where("status", "in", ["주문 접수 중", "요리 중", "서빙 완료"])
-                );
-                const querySnapshot = await getDocs(q);
-                
+                const ordersRef = ref(db, 'orders');
+                const snapshot = await get(ordersRef);
                 const newItems = orderedItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }));
+                
+                let existingOrderKey = null;
+                let existingData = null;
 
-                if (!querySnapshot.empty) {
-                    const existingOrderDoc = querySnapshot.docs[0];
-                    const existingData = existingOrderDoc.data();
-                    
+                if (snapshot.exists()) {
+                    const allOrders = snapshot.val();
+                    for (const key in allOrders) {
+                        const order = allOrders[key];
+                        if (order.tableNumber === parsedTableNumber && 
+                            order.festivalDay === activeDayInfo.day && 
+                            ["주문 접수 중", "요리 중", "서빙 완료"].includes(order.status)) {
+                            existingOrderKey = key;
+                            existingData = order;
+                            break;
+                        }
+                    }
+                }
+
+                if (existingOrderKey && existingData) {
                     const newBatch = { acknowledged: false, items: newItems };
                     const existingBatches = existingData.orderBatches || [{ acknowledged: true, items: existingData.items || [] }];
                     const updatedBatches = [...existingBatches, newBatch];
                     const newTotalPrice = updatedBatches.flat().flatMap(batch => batch.items).reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-                    await updateDoc(existingOrderDoc.ref, {
+                    const targetRef = ref(db, `orders/${existingOrderKey}`);
+                    await set(targetRef, {
+                        ...existingData,
                         orderBatches: updatedBatches,
                         totalPrice: newTotalPrice,
-                        timestamp: new Date(),
+                        timestamp: new Date().toISOString(),
                         isHighlighted: true,
                         partySize: existingData.partySize || (existingData.orderBatches?.[0]?.items || []).filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0)
                     });
@@ -275,14 +285,15 @@
                 } else {
                     const firstBatch = { acknowledged: false, items: newItems };
                     const totalPrice = firstBatch.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                    const newOrderRef = push(ordersRef);
 
-                    await addDoc(collection(db, "orders"), {
+                    await set(newOrderRef, {
                         tableNumber: parsedTableNumber,
                         orderBatches: [firstBatch],
                         totalPrice: totalPrice,
                         status: "주문 접수 중",
-                        timestamp: new Date(),
-                        startTime: new Date(),
+                        timestamp: new Date().toISOString(),
+                        startTime: new Date().toISOString(),
                         partySize: firstBatch.items.filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0),
                         overtimeChargeApplied: false,
                         festivalDay: activeDayInfo.day,
@@ -295,7 +306,7 @@
 
             } catch (e) {
                 console.error("주문 처리 오류 상세 정보: ", e);
-                showAlert("주문 실패", `오류가 발생했습니다. (코드: ${e.code})`);
+                showAlert("주문 실패", `오류가 발생했습니다. (${e.message || e.code})`);
                 submitOrderBtn.disabled = false;
             }
         });
