@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>융융죽겠지 주문</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-image: url('https://i.imgur.com/hiVFR2Z.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            background-position: center;
+        }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto max-w-lg p-4">
+        <header class="text-center my-6">
+            <div class="text-yellow-400 text-1g" style="text-shadow: 1px 1px 3px black;">★★★★&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;★★★★</div>
+            <h2 class="text-2xl font-bold text-red-500 tracking-wider" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.5);">스마트제조융합전공 주점</h2>
+            <h1 class="text-5xl font-extrabold text-blue-600 mt-2" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">융융<span class="text-white">죽겠지</span></h1>
+            <p class="text-white mt-3" style="text-shadow: 1px 1px 3px black;">간편하게 주문하세요!</p>
+        </header>
+
+        <div class="bg-white p-6 rounded-xl shadow-md mb-6 fade-in">
+            <label for="table-number" class="block text-lg font-semibold text-gray-800 mb-2">테이블 번호</label>
+            <input type="number" id="table-number" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="1~26번 테이블을 입력하세요" min="1" max="26">
+        </div>
+
+        <div id="menu-section" class="space-y-4 fade-in" style="animation-delay: 0.1s;">
+             <h2 class="text-2xl font-bold text-white mb-4">메뉴판</h2>
+            <template id="menu-item-template">
+                <div class="bg-white p-4 rounded-xl shadow-md flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900"></h3>
+                        <p class="text-gray-600 font-medium"></p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button class="quantity-change bg-gray-200 text-gray-800 rounded-full w-8 h-8 text-lg font-bold hover:bg-gray-300">-</button>
+                        <span class="quantity text-lg font-semibold w-8 text-center">0</span>
+                        <button class="quantity-change bg-indigo-500 text-white rounded-full w-8 h-8 text-lg font-bold hover:bg-indigo-600">+</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <div id="order-summary" class="mt-8 bg-white p-6 rounded-xl shadow-lg sticky bottom-4 fade-in" style="animation-delay: 0.2s;">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">주문 내역</h3>
+            <div id="cart-items" class="space-y-2 mb-4"><p class="text-gray-500">장바구니가 비어있습니다.</p></div>
+            <div class="border-t pt-4 flex justify-between items-center">
+                <span class="text-xl font-bold text-gray-900">총 금액:</span>
+                <span id="total-price" class="text-2xl font-bold text-indigo-600">0원</span>
+            </div>
+            <button id="submit-order" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-lg mt-4 hover:bg-indigo-700 disabled:bg-gray-400">주문하기</button>
+        </div>
+    </div>
+
+    <div id="alert-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-center fade-in">
+            <h2 id="alert-title" class="text-2xl font-bold text-red-500 mb-4"></h2>
+            <p id="alert-message" class="text-gray-700"></p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+       const firebaseConfig = {
+            apiKey: "AIzaSyAMS_URZ1lFsbyJscsIjPvgENZouSbnX0A",
+            authDomain: "order-cfe51.firebaseapp.com",
+            projectId: "order-cfe51",
+            storageBucket: "order-cfe51.firebasestorage.app",
+            messagingSenderId: "1047726700523",
+            appId: "1:1047726700523:web:0360158e7baca0d3450bae",
+            measurementId: "G-45K52YE0BB"
+        };
+
+        const submitOrderBtn = document.getElementById('submit-order');
+
+        function showAlert(title, message, duration = 2000) {
+            document.getElementById('alert-title').textContent = title;
+            document.getElementById('alert-message').textContent = message;
+            const modal = document.getElementById('alert-modal');
+            modal.classList.remove('hidden');
+            if(duration > 0) setTimeout(() => modal.classList.add('hidden'), duration);
+        }
+
+        if (!firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+            showAlert("설정 오류", "Firebase 설정이 필요합니다. 관리자에게 문의해주세요.", 0);
+            submitOrderBtn.disabled = true;
+        } else {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            let configData = null;
+            
+            async function fetchConfig() {
+                const configRef = doc(db, "festivalConfig", "settings");
+                try {
+                    const docSnap = await getDoc(configRef);
+                    if (docSnap.exists()) {
+                        configData = docSnap.data();
+                        submitOrderBtn.disabled = false;
+                    } else {
+                        showAlert("시스템 오류", "주문 시스템 설정을 찾을 수 없습니다.", 0);
+                        submitOrderBtn.disabled = true;
+                    }
+                } catch (error) {
+                    showAlert("네트워크 오류", "시스템 정보를 불러오는 데 실패했습니다.", 0);
+                    submitOrderBtn.disabled = true;
+                }
+            }
+            fetchConfig();
+
+            const menuData = [
+                {
+                    category: '🪑 자릿세',
+                    items: [ { id: 'seat-charge', name: '1인', price: 3000 }]
+                },
+                {
+                    category: '🍗 치킨(순살)',
+                    items: [
+                        { id: 'fried-chicken', name: '스제치킨(후라이드)', price: 20900 },
+                        { id: 'yangnyeom-chicken', name: '양념치킨', price: 21900 },
+                        { id: 'supreme-yangnyeom-chicken', name: '뿌링클치킨', price: 21900 },
+                    ]
+                },
+                {
+                    category: '🍟 사이드',
+                    items: [
+                        { id: 'fruit', name: '화채', price: 7900 },
+                        { id: 'tteokbokki', name: '떡볶이', price: 7900 },
+                        { id: 'takoyaki', name: '타꼬야끼', price: 7900 },
+                        { id: 'fries', name: '감자튀김', price: 6900 },
+                        { id: 'zero', name: '펩시제로', price: 2000 },
+                        { id: 'pepsi', name: '펩시', price: 2000 },
+                        { id: 'water', name: '물', price: 1000 },
+                    ]
+                },
+                 {
+                    category: '🙋‍♂️호출',
+                    items: [
+                        { id: 'employee', name: '직원 호출', price: 0},
+                        { id: 'seat', name: '합석 원해요', price: 0},
+                        { id: 'snack', name: '과자 리필', price: 0},
+                        { id: 'soju', name: '소주잔', price: 0},
+                        { id: 'glass', name: '종이컵', price: 0},
+                        { id: 'plate', name: '앞접시', price: 0},                        
+                        { id: 'tisue', name: '물티슈', price: 0},
+                        { id: 'spoon', name: '숟가락', price: 0},
+                        { id: 'chap', name: '젓가락', price: 0}
+                    ]
+                }
+            ];
+
+            const menuSection = document.getElementById('menu-section');
+            const menuItemTemplate = document.getElementById('menu-item-template');
+            const cart = {};
+        
+            menuSection.innerHTML = '<h2 class="text-2xl font-bold text-white mb-4" style="text-shadow: 1px 1px 3px black;">메뉴판</h2>'; 
+
+            menuData.forEach(categoryInfo => {
+                const categoryTitle = document.createElement('h3');
+                categoryTitle.className = 'text-xl font-bold text-white mt-8 mb-3';
+                categoryTitle.style.textShadow = '1px 1px 3px black';
+                categoryTitle.textContent = categoryInfo.category;
+                menuSection.appendChild(categoryTitle);
+
+                categoryInfo.items.forEach(item => {
+                    const clone = menuItemTemplate.content.cloneNode(true);
+                    clone.querySelector('h3').textContent = item.name;
+                    if (item.price > 0) {
+                        clone.querySelector('p').textContent = `${item.price.toLocaleString()}원`;
+                    } else {
+                        clone.querySelector('p').textContent = '';
+                    }
+                    const [minusBtn, plusBtn] = clone.querySelectorAll('.quantity-change');
+                    const quantitySpan = clone.querySelector('.quantity');
+                    minusBtn.addEventListener('click', () => updateQuantity(item, -1, quantitySpan));
+                    plusBtn.addEventListener('click', () => updateQuantity(item, 1, quantitySpan));
+                    menuSection.appendChild(clone);
+                    cart[item.id] = { ...item, quantity: 0 };
+                });
+            });
+
+            function updateQuantity(item, change, quantitySpan) {
+                const currentQuantity = cart[item.id].quantity;
+                if (currentQuantity + change >= 0) {
+                    cart[item.id].quantity += change;
+                    quantitySpan.textContent = cart[item.id].quantity;
+                    updateCart();
+                }
+            }
+
+            const cartItemsDiv = document.getElementById('cart-items');
+            const totalPriceSpan = document.getElementById('total-price');
+
+            function updateCart() {
+                cartItemsDiv.innerHTML = '';
+                let total = 0;
+                let hasItems = false;
+                Object.values(cart).forEach(item => {
+                    if (item.quantity > 0) {
+                        hasItems = true;
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'flex justify-between text-gray-800';
+                        const priceText = item.price > 0 ? `<span>${(item.price * item.quantity).toLocaleString()}원</span>` : '<span>-</span>';
+                        itemDiv.innerHTML = `<span>${item.name} x${item.quantity}</span>${priceText}`;
+                        cartItemsDiv.appendChild(itemDiv);
+                        total += item.price * item.quantity;
+                    }
+                });
+                if (!hasItems) cartItemsDiv.innerHTML = '<p class="text-gray-500">장바구니가 비어있습니다.</p>';
+                totalPriceSpan.textContent = `${total.toLocaleString()}원`;
+            }
+
+            submitOrderBtn.addEventListener('click', async () => {
+                submitOrderBtn.disabled = true;
+
+                const activeDayInfo = configData?.dayTabs.find(d => d.day === configData.activeDay);
+                if (!activeDayInfo || !activeDayInfo.date) {
+                    showAlert("주문 불가", "현재 주문 접수 시간이 아닙니다.");
+                    submitOrderBtn.disabled = false; return;
+                }
+
+                const tableNumber = document.getElementById('table-number').value;
+                if (!tableNumber) {
+                    showAlert("입력 오류", "테이블 번호를 입력해주세요.");
+                    submitOrderBtn.disabled = false; return;
+                }
+                
+                const orderedItems = Object.values(cart).filter(item => item.quantity > 0);
+                if (orderedItems.length === 0) {
+                    showAlert("입력 오류", "메뉴를 선택해주세요.");
+                    submitOrderBtn.disabled = false; return;
+                }
+
+                const parsedTableNumber = parseInt(tableNumber, 10);
+                if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1 || parsedTableNumber > 26) {
+                    showAlert("입력 오류", "테이블 번호는 1번부터 26번까지 입력해주세요.");
+                    submitOrderBtn.disabled = false; return;
+                }
+
+                try {
+                    const q = query(collection(db, "orders"), 
+                        where("tableNumber", "==", parsedTableNumber),
+                        where("festivalDay", "==", activeDayInfo.day),
+                        where("status", "in", ["주문 접수 중", "요리 중", "서빙 완료"])
+                    );
+                    const querySnapshot = await getDocs(q);
+                    
+                    const newItems = orderedItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }));
+
+                    if (!querySnapshot.empty) {
+                        const existingOrderDoc = querySnapshot.docs[0];
+                        const existingData = existingOrderDoc.data();
+                        
+                        const newBatch = { acknowledged: false, items: newItems };
+                        const existingBatches = existingData.orderBatches || [{ acknowledged: true, items: existingData.items || [] }];
+                        const updatedBatches = [...existingBatches, newBatch];
+                        const newTotalPrice = updatedBatches.flat().flatMap(batch => batch.items).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+                        await updateDoc(existingOrderDoc.ref, {
+                            orderBatches: updatedBatches,
+                            totalPrice: newTotalPrice,
+                            timestamp: new Date(),
+                            isHighlighted: true,
+                            partySize: existingData.partySize || (existingData.orderBatches?.[0]?.items || []).filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0)
+                        });
+                        showAlert("추가 주문 완료!", "기존 주문에 메뉴가 추가되었습니다.", 2000);
+                    } else {
+                        const firstBatch = { acknowledged: false, items: newItems };
+                        const totalPrice = firstBatch.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+                        await addDoc(collection(db, "orders"), {
+                            tableNumber: parsedTableNumber,
+                            orderBatches: [firstBatch],
+                            totalPrice: totalPrice,
+                            status: "주문 접수 중",
+                            timestamp: new Date(),
+                            startTime: new Date(),
+                            partySize: firstBatch.items.filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0),
+                            overtimeChargeApplied: false,
+                            festivalDay: activeDayInfo.day,
+                            isHighlighted: true
+                        });
+                        showAlert("주문 완료!", "주문이 성공적으로 접수되었습니다.", 2000);
+                    }
+                    
+                    setTimeout(() => { window.location.reload(); }, 2100);
+
+                } catch (e) {
+                    console.error("주문 처리 오류 상세 정보: ", e);
+                    showAlert("주문 실패", `오류가 발생했습니다. (코드: ${e.code})`);
+                    submitOrderBtn.disabled = false;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

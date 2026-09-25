@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주문 관리 대시보드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-btn { transition: all 0.2s ease-in-out; }
+        .tab-btn.view-active { background-color: #4f46e5; color: white; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .summary-card, .order-card { animation: fadeIn 0.5s ease-in-out; }
+
+        .highlight-new-order {
+            border-width: 4px;
+            border-color: #ef4444; /* red-500 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <audio id="new-order-sound" src="https://github.com/CWNU-Smart/order_/raw/refs/heads/main/ta-da_yrvBrlS.mp3" preload="auto"></audio>
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center my-6 relative">
+            <h1 class="text-4xl font-bold text-gray-800">주문 관리 대시보드</h1>
+            <p class="text-gray-600 mt-2">일자를 선택해 주문을 관리하세요.</p>
+            <button id="sound-toggle-btn" class="absolute top-0 right-0 p-2 rounded-full hover:bg-gray-200 transition"></button>
+        </header>
+
+        <div id="day-tabs-container" class="mb-6 flex items-center justify-center flex-wrap gap-3"></div>
+        <section id="summary-section" class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6"></section>
+        <main id="order-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></main>
+    </div>
+
+    <div id="modal-container" class="hidden fixed inset-0 z-50"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, query, onSnapshot, doc, updateDoc, deleteDoc, getDoc, setDoc, writeBatch, getDocs, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMS_URZ1lFsbyJscsIjPvgENZouSbnX0A",
+            authDomain: "order-cfe51.firebaseapp.com",
+            projectId: "order-cfe51",
+            storageBucket: "order-cfe51.firebasestorage.app",
+            messagingSenderId: "1047726700523",
+            appId: "1:1047726700523:web:0360158e7baca0d3450bae",
+            measurementId: "G-45K52YE0BB"
+        };
+        
+        if (!firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+            document.body.innerHTML = `<div class="p-8 text-center bg-white"><h1 class="text-3xl font-bold text-red-600">Firebase 설정 오류</h1></div>`;
+            throw new Error("Firebase configuration is missing.");
+        }
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const DELETE_PASSWORD = "11531153";
+
+        let allOrders = [];
+        let config = { dayTabs: [], activeDay: null };
+        let viewingDay = 'all';
+        let previousOrdersMap = new Map();
+        let isMuted = false;
+        
+        const configRef = doc(db, "festivalConfig", "settings");
+        const dayTabsContainer = document.getElementById('day-tabs-container');
+        const summarySection = document.getElementById('summary-section');
+        const orderList = document.getElementById('order-list');
+        const modalContainer = document.getElementById('modal-container');
+        const soundToggleBtn = document.getElementById('sound-toggle-btn');
+        const newOrderAudio = document.getElementById('new-order-sound');
+        
+        const soundOnIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>`;
+        const soundOffIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l-2-2m0 0l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+
+        function toggleSound() {
+            isMuted = !isMuted;
+            soundToggleBtn.innerHTML = isMuted ? soundOffIcon : soundOnIcon;
+        }
+        soundToggleBtn.innerHTML = soundOnIcon;
+        soundToggleBtn.addEventListener('click', toggleSound);
+
+        const formatTimestamp = (ts) => {
+            if (!ts || !ts.seconds) return '';
+            const date = new Date(ts.seconds * 1000);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}년 ${month}월 ${day}일 ${hours}시 ${minutes}분`;
+        };
+        
+        function calculateSales(orders) {
+            let totalRevenue = 0;
+            const menuSales = {};
+            const allItems = orders.flatMap(order => 
+                (order.orderBatches || []).flatMap(batch => batch.items)
+            );
+            allItems.forEach(item => {
+                const quantity = item.quantity || 1;
+                menuSales[item.name] = (menuSales[item.name] || 0) + quantity;
+            });
+            totalRevenue = allItems.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+            return { totalRevenue, menuSales };
+        }
+
+        async function applyOvertimeCharges() {
+            const now = Date.now();
+            const twoHoursMs = 2 * 60 * 60 * 1000;
+            const activeStatuses = ["주문 접수 중", "요리 중", "서빙 완료"];
+
+            for (const order of allOrders) {
+                if (!activeStatuses.includes(order.status) || order.overtimeChargeApplied) continue;
+
+                const startTs = order.startTime || order.timestamp;
+                if (!startTs || !startTs.seconds) continue;
+
+                const startMs = startTs.seconds * 1000 + Math.floor((startTs.nanoseconds || 0) / 1000000);
+                if (now - startMs < twoHoursMs) continue;
+
+                const partySize = order.partySize || (order.orderBatches?.[0]?.items || [])
+                    .filter(item => item.name === '1인')
+                    .reduce((sum, item) => sum + (item.quantity || 0), 0);
+                if (!partySize) continue;
+
+                try {
+                    const orderRef = doc(db, "orders", order.id);
+                    const orderSnap = await getDoc(orderRef);
+                    if (!orderSnap.exists()) continue;
+                    const latest = orderSnap.data();
+                    if (latest.overtimeChargeApplied || !activeStatuses.includes(latest.status)) continue;
+
+                    const latestPartySize = latest.partySize || (latest.orderBatches?.[0]?.items || [])
+                        .filter(item => item.name === '1인')
+                        .reduce((sum, item) => sum + (item.quantity || 0), 0);
+                    if (!latestPartySize) continue;
+
+                    const batches = latest.orderBatches || [];
+                    const overtimeBatch = {
+                        acknowledged: true,
+                        automatic: true,
+                        items: [{
+                            name: '2시간 초과 요금',
+                            quantity: latestPartySize,
+                            price: 1500
+                        }]
+                    };
+                    const newTotal = batches.flatMap(batch => batch.items || [])
+                        .reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0)
+                        + (1500 * latestPartySize);
+
+                    await updateDoc(orderRef, {
+                        orderBatches: [...batches, overtimeBatch],
+                        totalPrice: newTotal,
+                        overtimeChargeApplied: true,
+                        overtimeChargeAppliedAt: new Date()
+                    });
+                } catch (error) {
+                    console.error('2시간 초과 요금 자동 적용 오류:', error);
+                }
+            }
+        }
+
+        function renderDashboard() {
+            const isTotalView = viewingDay === 'all';
+            const ordersToDisplay = isTotalView ? allOrders : allOrders.filter(order => order.festivalDay === viewingDay);
+            
+            const { totalRevenue, menuSales } = calculateSales(ordersToDisplay);
+
+            summarySection.innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-lg summary-card">
+                    <h2 class="text-xl font-bold text-gray-700 mb-2">${isTotalView ? '전체 총 매출' : '일일 총 매출'}</h2>
+                    <p class="text-4xl font-extrabold text-indigo-600">${totalRevenue.toLocaleString()}원</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg summary-card">
+                    <h2 class="text-xl font-bold text-gray-700 mb-2">${isTotalView ? '전체 메뉴별 판매량' : '일일 메뉴별 판매량'}</h2>
+                    <div class="space-y-2 text-gray-800">${Object.keys(menuSales).length > 0 ? Object.entries(menuSales).sort(([,a],[,b]) => b-a).map(([name, q]) => `<p class="flex justify-between font-medium"><span>${name}</span><span>${q}개</span></p>`).join('') : '<p class="text-gray-500">주문 내역이 없습니다.</p>'}</div>
+                </div>`;
+
+            orderList.innerHTML = '';
+            ordersToDisplay.sort((a,b) => a.timestamp.seconds - b.timestamp.seconds);
+            ordersToDisplay.forEach(order => {
+                const cardWrapper = document.createElement('div');
+                cardWrapper.innerHTML = createOrderCardHTML(order).trim();
+                orderList.appendChild(cardWrapper.firstChild);
+            });
+        }
+        
+        function createOrderCardHTML(order) {
+            const statusStyles = { "주문 접수 중": "border-yellow-400", "요리 중": "border-blue-400", "서빙 완료": "border-green-400", "처리 완료": "border-gray-300" };
+            const statusBtnStyles = { "주문 접수 중": "bg-yellow-100 text-yellow-800", "요리 중": "bg-blue-100 text-blue-800", "서빙 완료": "bg-green-100 text-green-800", "처리 완료": "bg-gray-200 text-gray-500" };
+            const highlightClass = order.isHighlighted ? 'highlight-new-order' : (statusStyles[order.status] || '');
+            const history = order.statusHistory || [];
+            const lastRecord = history.length > 0 ? history[history.length - 1] : null;
+            const lastTime = lastRecord ? new Date(lastRecord.time).toLocaleString("ko-KR") : formatTimestamp(order.timestamp);
+            const historyText = history.map(h => `${h.status} - ${new Date(h.time).toLocaleString("ko-KR")}`).join("\n");
+
+            const batchesHTML = (order.orderBatches || []).map((batch, index) => {
+                const itemsHTML = (batch.items || []).map(item => {
+                    const textColor = !batch.acknowledged ? 'text-red-500 font-bold' : 'text-gray-700';
+                    const quantityText = `x${item.quantity || 1}`;
+                    return `<p class="flex justify-between ${textColor}"><span>${item.name} ${quantityText}</span></p>`;
+                }).join('');
+                const separator = index > 0 ? '<hr class="my-2 border-dashed border-gray-400">' : '';
+                return separator + itemsHTML;
+            }).join('');
+
+            return `
+            <div data-order-id="${order.id}" class="bg-white rounded-xl shadow-lg p-5 flex flex-col transition-all duration-300 relative order-card border-4 ${highlightClass} ${order.status === '처리 완료' ? 'opacity-60' : ''}">
+                <div class="flex justify-between items-start mb-3">
+                    <h2 class="text-2xl font-bold text-indigo-500 pr-4">테이블 <span class="table-number">${order.tableNumber}</span></h2>
+                    <div class="text-right flex-shrink-0" title="${historyText}">
+                        <button data-action="showDeleteModal" data-id="${order.id}" class="text-gray-400 hover:text-red-600 z-10 block ml-auto w-6 h-6">
+                            <svg class="pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+                        <span class="order-time text-xs text-gray-500 block mt-1">${lastTime}</span>
+                    </div>
+                </div>
+                <div class="order-items border-t border-b border-gray-200 py-3 my-3 space-y-2 text-gray-700 flex-grow">${batchesHTML}</div>
+                <div class="text-right mb-4"><span class="text-lg font-semibold">총 금액: </span><span class="total-price text-xl font-bold text-gray-900">${order.totalPrice.toLocaleString()}원</span></div>
+                <div class="status-btn-group grid grid-cols-2 gap-2 text-sm">${Object.keys(statusBtnStyles).map(status => `<button data-action="updateStatus" data-id="${order.id}" data-status="${status}" class="p-2 rounded-md font-semibold ${status === order.status ? statusBtnStyles[status] : 'bg-gray-200 hover:bg-gray-300'}">${status}</button>`).join('')}</div>
+            </div>`;
+        }
+
+        function renderTabs() {
+            const validTabs = (config.dayTabs || []).filter(d => d && typeof d.day === 'number');
+            const tabsHTML = validTabs.sort((a, b) => a.day - b.day).map(dayInfo => `
+                <div class="relative group">
+                    <button data-day="${dayInfo.day}" class="tab-btn px-4 py-2 rounded-md font-semibold text-sm bg-white shadow w-full text-left ${dayInfo.day === viewingDay ? 'view-active' : ''}">
+                        ${dayInfo.day}일차
+                    </button>
+                    <div class="absolute top-full pt-1 left-1/2 -translate-x-1/2 z-20 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-300">
+                        <div class="flex items-center bg-white shadow-xl rounded-md p-1">
+                            <button data-action="activateDay" data-day="${dayInfo.day}" title="활성화" class="p-2 text-gray-500 hover:text-emerald-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg></button>
+                            <button data-action="showDateModal" data-day="${dayInfo.day}" title="날짜 수정" class="p-2 text-gray-500 hover:text-indigo-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg></button>
+                            <button data-action="showPasswordModal" data-day="${dayInfo.day}" title="삭제" class="p-2 text-gray-500 hover:text-red-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg></button>
+                        </div>
+                    </div>
+                    ${dayInfo.day === config.activeDay ? '<span class="absolute -top-2 -right-2 text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">ON</span>' : ''}
+                </div>`
+            ).join('');
+            const totalTabHTML = `<div class="relative"><button data-day="all" class="tab-btn px-4 py-2 rounded-md font-semibold text-sm bg-white shadow ${viewingDay === 'all' ? 'view-active' : ''}">📊 전체</button></div>`;
+            const addDayBtnHTML = `<button id="add-day-btn" class="px-3 py-2 bg-green-500 text-white rounded-md font-bold text-sm hover:bg-green-600 shadow">+</button>`;
+            const exportBtnHTML = `<button id="export-btn" class="px-4 py-2 bg-gray-700 text-white rounded-md font-semibold text-sm hover:bg-gray-800 shadow">엑셀 내보내기</button>`;
+            dayTabsContainer.innerHTML = totalTabHTML + tabsHTML + addDayBtnHTML + exportBtnHTML;
+        }
+
+        function showModal(innerHTML) {
+            modalContainer.innerHTML = `<div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">${innerHTML}</div>`;
+            modalContainer.classList.remove('hidden');
+        }
+        function hideModal() { modalContainer.classList.add('hidden'); modalContainer.innerHTML = ''; }
+
+        const appFunctions = {
+            showDateModal: (day) => {
+                const dayInfo = config.dayTabs.find(d => d.day === day);
+                showModal(`<div class="bg-white p-8 rounded-xl shadow-2xl text-center w-full max-w-sm"><h2 class="text-xl font-bold text-gray-800 mb-4">${day}일차 날짜 설정</h2><input id="date-input" type="date" value="${dayInfo.date || ''}" class="w-full p-2 border rounded-md mb-4"><div class="flex justify-center space-x-4"><button data-action="hideModal" class="px-6 py-2 bg-gray-300 rounded-lg">취소</button><button id="save-date-btn" class="px-6 py-2 bg-indigo-600 text-white rounded-lg">저장</button></div></div>`);
+                document.getElementById('save-date-btn').onclick = () => appFunctions.saveDate(day);
+            },
+            saveDate: async (day) => {
+                const newDate = document.getElementById('date-input').value;
+                if (!newDate) { alert('날짜를 선택해주세요.'); return; }
+                const updatedDayTabs = config.dayTabs.map(d => d.day === day ? { ...d, date: newDate } : d);
+                await setDoc(configRef, { dayTabs: updatedDayTabs }, { merge: true });
+                hideModal();
+            },
+            activateDay: async (day) => {
+                const dayInfo = config.dayTabs.find(d => d.day === day);
+                if (!dayInfo || !dayInfo.date) { alert('날짜가 설정되지 않은 일차는 활성화할 수 없습니다.'); return; }
+                if (confirm(`${day}일차(${dayInfo.date})를 주문 수집일로 활성화하시겠습니까?`)) {
+                    await setDoc(configRef, { activeDay: day }, { merge: true });
+                }
+            },
+            showPasswordModal: (day) => {
+                showModal(`<div class="bg-white p-8 rounded-xl shadow-2xl text-center w-full max-w-sm"><h2 class="text-xl font-bold text-red-600 mb-4">${day}일차 삭제</h2><p class="text-gray-600 mb-4">삭제하려면 비밀번호를 입력하세요. 해당 일차의 모든 주문 내역이 영구적으로 삭제됩니다.</p><input id="password-input" type="password" class="w-full p-2 border rounded-md mb-4" placeholder="비밀번호"><div class="flex justify-center space-x-4"><button data-action="hideModal" class="px-6 py-2 bg-gray-300 rounded-lg">취소</button><button id="confirm-delete-day-btn" class="px-6 py-2 bg-red-600 text-white rounded-lg">삭제 확인</button></div></div>`);
+                document.getElementById('confirm-delete-day-btn').onclick = () => appFunctions.confirmDeleteDay(day);
+            },
+            confirmDeleteDay: async (dayToDelete) => {
+                const password = document.getElementById('password-input').value;
+                if (password !== DELETE_PASSWORD) {
+                    alert('비밀번호가 틀렸습니다.');
+                    return;
+                }
+                if (!confirm(`정말로 ${dayToDelete}일차의 모든 데이터를 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
+                
+                hideModal();
+
+                try {
+                    const batch = writeBatch(db);
+                    
+                    const ordersToDeleteQuery = query(collection(db, "orders"), where("festivalDay", "==", dayToDelete));
+                    const ordersToDeleteSnapshot = await getDocs(ordersToDeleteQuery);
+                    ordersToDeleteSnapshot.forEach(doc => batch.delete(doc.ref));
+                    
+                    const updatedTabs = config.dayTabs.filter(d => d.day !== dayToDelete);
+                    let newActiveDay = config.activeDay;
+                    if (config.activeDay === dayToDelete) {
+                        newActiveDay = null;
+                    }
+                    
+                    batch.set(configRef, { 
+                        dayTabs: updatedTabs, 
+                        activeDay: newActiveDay 
+                    }, { merge: true });
+                    
+                    await batch.commit();
+                    
+                    alert(`${dayToDelete}일차 데이터가 성공적으로 삭제되었습니다.`);
+                } catch (error) { 
+                    console.error("일차 삭제 중 오류 발생:", error); 
+                    alert("데이터 삭제 중 오류가 발생했습니다: " + error.message); 
+                }
+            },
+            showDeleteModal: (orderId) => {
+                showModal(`<div class="bg-white p-8 rounded-xl shadow-2xl text-center w-full max-w-sm"><h2 class="text-xl font-bold text-red-600 mb-4">정말로 삭제하시겠습니까?</h2><p class="text-gray-700 mb-6">이 주문 내역은 영구적으로 삭제됩니다.</p><div class="flex justify-center space-x-4"><button data-action="hideModal" class="px-6 py-2 bg-gray-300 rounded-lg">취소</button><button id="confirm-delete-btn" class="px-6 py-2 bg-red-600 text-white rounded-lg">삭제</button></div></div>`);
+                document.getElementById('confirm-delete-btn').onclick = () => appFunctions.confirmDelete(orderId);
+            },
+            confirmDelete: async (orderId) => { await deleteDoc(doc(db, "orders", orderId)); hideModal(); },
+            updateStatus: async (orderId, status) => {
+                const orderRef = doc(db, "orders", orderId);
+                const orderSnap = await getDoc(orderRef);
+                let statusHistory = [];
+
+                if(orderSnap.exists()) {
+                    const data = orderSnap.data();
+                    statusHistory = data.statusHistory || [];
+                    statusHistory.push({
+                        status,
+                        time: new Date().toISOString()
+                    });
+
+                    const updateData = { 
+                        status: status, 
+                        isHighlighted: false, 
+                        statusHistory 
+                    };
+
+                    if(status !== '주문 접수 중') {
+                        const updatedBatches = (data.orderBatches || []).map(batch => ({ ...batch, acknowledged: true }));
+                        updateData.orderBatches = updatedBatches;
+                    }
+                    await updateDoc(orderRef, updateData);
+                }
+            },
+            showExportModal: () => {
+                const isTotalView = viewingDay === 'all';
+                const dayLabel = isTotalView ? '전체' : `${viewingDay}일차`;
+                showModal(`
+                    <div class="bg-white p-8 rounded-xl shadow-2xl text-center w-full max-w-sm">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4">${dayLabel} 데이터 엑셀 내보내기</h2>
+                        <div class="text-left space-y-3 mb-6">
+                            <label class="flex items-center space-x-3">
+                                <input type="checkbox" id="export-orders" class="form-checkbox h-5 w-5 text-indigo-600 rounded" checked>
+                                <span class="text-gray-700 font-medium">${dayLabel} 주문 내역 상세</span>
+                            </label>
+                            <label class="flex items-center space-x-3 ${isTotalView ? 'opacity-50' : ''}">
+                                <input type="checkbox" id="export-daily-sales" class="form-checkbox h-5 w-5 text-indigo-600 rounded" ${isTotalView ? 'disabled' : 'checked'}>
+                                <span class="text-gray-700 font-medium">${viewingDay}일차 매출 요약</span>
+                            </label>
+                            <label class="flex items-center space-x-3">
+                                <input type="checkbox" id="export-total-sales" class="form-checkbox h-5 w-5 text-indigo-600 rounded" checked>
+                                <span class="text-gray-700 font-medium">전체 기간 총 매출 요약</span>
+                            </label>
+                        </div>
+                        <div class="flex justify-center space-x-4">
+                            <button data-action="hideModal" class="px-6 py-2 bg-gray-300 rounded-lg">취소</button>
+                            <button id="confirm-export-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg">내보내기</button>
+                        </div>
+                    </div>
+                `);
+                document.getElementById('confirm-export-btn').onclick = appFunctions.exportToExcel;
+            },
+            exportToExcel: () => {
+                const wb = XLSX.utils.book_new();
+                let sheetsAdded = 0;
+
+                const calculateDetailedSales = (orders) => {
+                    const sales = {};
+                    const allItems = orders.flatMap(o => (o.orderBatches || []).flatMap(b => b.items));
+                    allItems.forEach(item => {
+                        if (!sales[item.name]) {
+                            sales[item.name] = {
+                                price: item.price,
+                                quantity: 0,
+                                total: 0
+                            };
+                        }
+                        const quantity = item.quantity || 1;
+                        sales[item.name].quantity += quantity;
+                        sales[item.name].total += item.price * quantity;
+                    });
+                    return sales;
+                };
+
+                const isTotalView = viewingDay === 'all';
+                
+                if (document.getElementById('export-daily-sales')?.checked && !isTotalView) {
+                    const dailyOrders = allOrders.filter(order => order.festivalDay === viewingDay);
+                    const detailedSales = calculateDetailedSales(dailyOrders);
+                    const totalRevenue = Object.values(detailedSales).reduce((sum, item) => sum + item.total, 0);
+                    
+                    const wsData = [
+                        ['메뉴명', '판매 수량', '합계 금액'],
+                        ...Object.entries(detailedSales).map(([name, data]) => [name, data.quantity, data.total]),
+                        [],
+                        ['총 매출', '', totalRevenue]
+                    ];
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    XLSX.utils.book_append_sheet(wb, ws, `${viewingDay}일차 매출`);
+                    sheetsAdded++;
+                }
+
+                if (document.getElementById('export-total-sales')?.checked) {
+                    const detailedSales = calculateDetailedSales(allOrders);
+                    const totalRevenue = Object.values(detailedSales).reduce((sum, item) => sum + item.total, 0);
+                    
+                    const wsData = [
+                        ['메뉴명', '판매 수량', '합계 금액'],
+                        ...Object.entries(detailedSales).map(([name, data]) => [name, data.quantity, data.total]),
+                        [],
+                        ['총 매출', '', totalRevenue]
+                    ];
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    XLSX.utils.book_append_sheet(wb, ws, '전체 매출');
+                    sheetsAdded++;
+                }
+
+                if (document.getElementById('export-orders')?.checked) {
+                    const ordersToExport = isTotalView ? allOrders : allOrders.filter(order => order.festivalDay === viewingDay);
+                    const data = ordersToExport.map(order => ({
+                        '주문시간': formatTimestamp(order.timestamp),
+                        '일차': order.festivalDay,
+                        '테이블': order.tableNumber,
+                        '메뉴': (order.orderBatches || []).flatMap(b => b.items).map(item => `${item.name} x${item.quantity || 1}`).join(', '),
+                        '총금액': order.totalPrice,
+                        '상태': order.status
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    XLSX.utils.book_append_sheet(wb, ws, `${isTotalView ? '전체' : viewingDay + '일차'} 주문내역`);
+                    sheetsAdded++;
+                }
+
+                if (sheetsAdded > 0) {
+                    XLSX.writeFile(wb, `festival_data_${new Date().toISOString().split('T')[0]}.xlsx`);
+                } else {
+                    alert('내보낼 항목을 하나 이상 선택해주세요.');
+                }
+                hideModal();
+            },
+            hideModal: hideModal
+        };
+
+        document.body.addEventListener('click', e => {
+            let target = e.target;
+            while(target && !target.dataset.action && target.id !== 'add-day-btn' && target.id !== 'export-btn' && !target.matches('.tab-btn')) { target = target.parentElement; }
+            if(!target) return;
+            const action = target.dataset.action;
+            if (action && appFunctions[action]) {
+                const day = target.dataset.day ? parseInt(target.dataset.day) : null;
+                const id = target.dataset.id;
+                const status = target.dataset.status;
+                if (day !== null && !isNaN(day)) appFunctions[action](day);
+                else if (id && status) appFunctions[action](id, status);
+                else if (id) appFunctions[action](id);
+                else appFunctions[action]();
+            } else if (target.id === 'add-day-btn') {
+                const dayNumbers = (config.dayTabs || []).map(d => d.day).filter(d => !isNaN(d));
+                const nextDay = dayNumbers.length > 0 ? Math.max(0, ...dayNumbers) + 1 : 1;
+                setDoc(configRef, { dayTabs: [...(config.dayTabs || []), { day: nextDay, date: null }] }, { merge: true });
+            } else if (target.id === 'export-btn') {
+                appFunctions.showExportModal();
+            } else if (target.matches('.tab-btn')) {
+                const day = target.dataset.day;
+                viewingDay = day === 'all' ? 'all' : parseInt(day);
+                renderTabs();
+                renderDashboard();
+            }
+        });
+
+        onSnapshot(configRef, async (docSnap) => {
+            if (docSnap.exists()) {
+                config = { dayTabs: [], activeDay: 1, ...docSnap.data() };
+                const validDays = (config.dayTabs || []).map(d => d.day);
+                
+                if (viewingDay === null || (viewingDay !== 'all' && !validDays.includes(viewingDay))) {
+                    viewingDay = config.activeDay || (validDays.length > 0 ? Math.max(...validDays) : 'all');
+                }
+            } else {
+                const initialConfig = { dayTabs: [{day: 1, date: new Date().toISOString().split('T')[0]}], activeDay: 1 };
+                await setDoc(configRef, initialConfig);
+                config = initialConfig;
+                viewingDay = 1;
+            }
+            renderTabs();
+            renderDashboard();
+        });
+
+        onSnapshot(query(collection(db, "orders")), (snapshot) => {
+            const newOrdersMap = new Map();
+            snapshot.docs.forEach(doc => newOrdersMap.set(doc.id, { id: doc.id, ...doc.data() }));
+            
+            if (previousOrdersMap.size > 0 && !isMuted) {
+                newOrdersMap.forEach((order, id) => {
+                    const prevOrder = previousOrdersMap.get(id);
+
+                    // A. 신규 주문 감지: 이전 주문이 없었는데 새로 생겼고, 하이라이트 상태일 때
+                    if (!prevOrder && order.isHighlighted) {
+                        newOrderAudio.cloneNode(true).play().catch(e => console.error("New order sound error:", e));
+                    }
+                    // B. 추가 주문 감지: 이전 주문이 있었고, 하이라이트가 아니었는데 하이라이트로 바뀌었을 때
+                    else if (prevOrder && !prevOrder.isHighlighted && order.isHighlighted) {
+                        newOrderAudio.cloneNode(true).play().catch(e => console.error("Additional order sound error:", e));
+                    }
+                });
+            }
+            
+            allOrders = Array.from(newOrdersMap.values());
+            previousOrdersMap = new Map(newOrdersMap);
+            renderDashboard();
+            applyOvertimeCharges();
+        });
+
+        // 관리자 화면이 열려 있는 동안 1분마다 2시간 초과 요금을 확인합니다.
+        setInterval(applyOvertimeCharges, 60 * 1000);
+    </script>
+</body>
+</html>
+
+
