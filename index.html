@@ -1,67 +1,4 @@
-!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>주문 관리 - 융융죽겠지</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .new-order { animation: newOrder 0.7s ease-out; }
-        @keyframes newOrder {
-            0% { transform: scale(0.96); opacity: 0.4; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-    </style>
-</head>
-<body class="bg-gray-900 text-white min-h-screen p-3">
-
-    <div class="max-w-screen-2xl mx-auto">
-        <header class="flex flex-col xl:flex-row justify-between items-center mb-4 pb-3 border-b border-gray-700">
-            <div>
-                <h1 class="text-2xl font-extrabold text-yellow-400">융융죽겠지 🍻 주문 관리</h1>
-                <p class="text-gray-400 text-xs mt-1">실시간 주문 현황</p>
-            </div>
-
-            <div class="flex flex-wrap items-center justify-center gap-2 mt-3 xl:mt-0">
-                <button id="sound-enable"
-                    class="bg-green-700 hover:bg-green-600 text-white px-3 py-2 rounded-lg font-bold text-xs">
-                    🔊 알림음 켜기
-                </button>
-
-                <div id="day-tabs" class="flex gap-1">
-                    <button data-day="day1" class="day-tab bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500">Day 1 (9/30)</button>
-                    <button data-day="day2" class="day-tab bg-gray-700 text-gray-300 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500">Day 2 (10/1)</button>
-                    <button data-day="day3" class="day-tab bg-gray-700 text-gray-300 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500">Day 3 (10/2)</button>
-                </div>
-            </div>
-        </header>
-
-        <!-- 총 매출은 표시하지 않음 -->
-        <div class="grid grid-cols-3 gap-2 mb-4">
-            <div class="bg-gray-800 p-2 rounded-lg border border-gray-700 text-center">
-                <p class="text-gray-400 text-xs">접수 중</p>
-                <p id="stat-pending" class="text-xl font-bold text-red-400 mt-1">0건</p>
-            </div>
-            <div class="bg-gray-800 p-2 rounded-lg border border-gray-700 text-center">
-                <p class="text-gray-400 text-xs">요리/서빙 중</p>
-                <p id="stat-cooking" class="text-xl font-bold text-yellow-400 mt-1">0건</p>
-            </div>
-            <div class="bg-gray-800 p-2 rounded-lg border border-gray-700 text-center">
-                <p class="text-gray-400 text-xs">총 주문</p>
-                <p id="stat-total-count" class="text-xl font-bold text-blue-400 mt-1">0건</p>
-            </div>
-        </div>
-
-        <!-- 한 화면에 더 많이 보이도록 카드 크기 축소 + 최대 6열 -->
-        <div id="orders-container"
-             class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
-            <p id="loading-msg" class="text-gray-400 col-span-full text-center py-10">주문 데이터를 불러오는 중입니다...</p>
-        </div>
-    </div>
-
-    <script type="module">
+<script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getDatabase, ref, onValue, update, remove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
@@ -82,13 +19,13 @@
         let currentActiveDay = "day1";
         let unsubscribeOrders = null;
 
-        // 처음 화면을 불러올 때 기존 주문에는 소리를 내지 않고,
-        // 이후 새 주문/추가 주문이 들어왔을 때만 소리를 냅니다.
         let initialized = false;
         let knownBatchKeys = new Set();
+        
+        // 🔥 추가 1: 타이머 중복 실행 방지 및 삭제 시간 설정
+        let scheduledDeletions = new Set(); 
+        const DELETE_DELAY_MS = 3 * 60 * 1000; // 3분 뒤 삭제 (만약 1분으로 줄이려면 1 * 60 * 1000 으로 변경하세요!)
 
-        // 브라우저의 자동재생 제한 때문에 사용자가 한 번 화면을 클릭하면
-        // Web Audio를 활성화합니다.
         let audioContext = null;
         let audioUnlocked = false;
 
@@ -112,31 +49,30 @@
 
             try {
                 const now = audioContext.currentTime;
+                const notes = [
+                    { freq: 784, start: 0.00, end: 0.22 },
+                    { freq: 988, start: 0.20, end: 0.42 },
+                    { freq: 1319, start: 0.40, end: 0.75 }
+                ];
 
-                const osc1 = audioContext.createOscillator();
-                const gain1 = audioContext.createGain();
-                osc1.type = 'sine';
-                osc1.frequency.setValueAtTime(880, now);
-                osc1.frequency.setValueAtTime(1175, now + 0.12);
-                gain1.gain.setValueAtTime(0.0001, now);
-                gain1.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
-                gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
-                osc1.connect(gain1);
-                gain1.connect(audioContext.destination);
-                osc1.start(now);
-                osc1.stop(now + 0.27);
+                notes.forEach(note => {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
 
-                const osc2 = audioContext.createOscillator();
-                const gain2 = audioContext.createGain();
-                osc2.type = 'sine';
-                osc2.frequency.value = 988;
-                gain2.gain.setValueAtTime(0.0001, now + 0.28);
-                gain2.gain.exponentialRampToValueAtTime(0.25, now + 0.30);
-                gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.53);
-                osc2.connect(gain2);
-                gain2.connect(audioContext.destination);
-                osc2.start(now + 0.28);
-                osc2.stop(now + 0.55);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(note.freq, now + note.start);
+
+                    gain.gain.setValueAtTime(0.0001, now + note.start);
+                    gain.gain.exponentialRampToValueAtTime(0.85, now + note.start + 0.025);
+                    gain.gain.setValueAtTime(0.85, now + note.end - 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + note.end);
+
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+
+                    osc.start(now + note.start);
+                    osc.stop(now + note.end + 0.02);
+                });
             } catch (e) {
                 console.warn('알림음 재생 실패:', e);
             }
@@ -147,10 +83,8 @@
             playNewOrderSound();
         });
 
-        // 화면 아무 곳이나 처음 클릭해도 알림음을 활성화
         document.addEventListener('click', () => unlockAudio(), { once: true });
 
-        // 날짜 자동 감지
         const todayStr = new Date().toISOString().split('T')[0];
         if (todayStr === "2026-10-01") currentActiveDay = "day2";
         else if (todayStr === "2026-10-02") currentActiveDay = "day3";
@@ -176,9 +110,6 @@
             });
         });
 
-        // 배치의 상태를 가져옵니다.
-        // 기존 데이터에는 batch.status가 없기 때문에 기존 주문은 order.status를 사용하고,
-        // 새로 추가된 미확인 주문은 "주문 접수 중"으로 표시합니다.
         function getBatchStatus(order, batch, idx) {
             if (batch.status) return batch.status;
             if (idx === 0) return order.status || "주문 접수 중";
@@ -197,7 +128,6 @@
             return batch.timestamp || order.timestamp;
         }
 
-        // 실시간 주문 수신
         function listenToOrders() {
             if (unsubscribeOrders) unsubscribeOrders();
 
@@ -215,39 +145,44 @@
                 }
 
                 const allOrdersData = snapshot.val();
+                
+                // 🔥 수정된 스케줄러 호출
+                scheduleExistingCompletedOrders(allOrdersData);
+                
                 const batches = [];
+                const now = Date.now();
 
                 for (const key in allOrdersData) {
                     const order = { id: key, ...allOrdersData[key] };
 
                     if (order.festivalDay !== currentActiveDay) continue;
 
+                    // 🔥 추가 2: 결제완료 후 3분이 넘었다면 DB 삭제 전이라도 무조건 화면에서 즉시 숨김
+                    if (order.status === "결제 완료" && order.completedAt) {
+                        const completedTime = new Date(order.completedAt).getTime();
+                        if (now - completedTime >= DELETE_DELAY_MS) {
+                            continue;
+                        }
+                    }
+
                     if (order.orderBatches && order.orderBatches.length > 0) {
                         order.orderBatches.forEach((batch, idx) => {
                             batches.push({
-                                order,
-                                batch,
-                                batchIndex: idx,
-                                batchKey: `${order.id}-${idx}`
+                                order, batch, batchIndex: idx, batchKey: `${order.id}-${idx}`
                             });
                         });
                     } else if (order.items) {
-                        // 구버전 주문 데이터 호환
                         batches.push({
                             order,
                             batch: {
-                                items: order.items,
-                                status: order.status,
-                                timestamp: order.timestamp,
-                                acknowledged: true
+                                items: order.items, status: order.status,
+                                timestamp: order.timestamp, acknowledged: true
                             },
-                            batchIndex: 0,
-                            batchKey: `${order.id}-legacy`
+                            batchIndex: 0, batchKey: `${order.id}-legacy`
                         });
                     }
                 }
 
-                // 최신 주문이 먼저
                 batches.sort((a, b) =>
                     new Date(getBatchTime(b.order, b.batch)) -
                     new Date(getBatchTime(a.order, a.batch))
@@ -255,7 +190,6 @@
 
                 const currentKeys = new Set(batches.map(x => x.batchKey));
 
-                // 초기 로딩 이후 새로 생긴 주문/추가 주문만 알림
                 if (initialized) {
                     const newKeys = [...currentKeys].filter(key => !knownBatchKeys.has(key));
                     if (newKeys.length > 0) {
@@ -288,8 +222,7 @@
             const status = getBatchStatus(order, batch, batchIndex);
             const statusBadgeColor = getStatusClass(status);
             const timeStr = new Date(getBatchTime(order, batch)).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
+                hour: '2-digit', minute: '2-digit'
             });
 
             const isAdditional = batchIndex > 0;
@@ -371,12 +304,11 @@
             document.getElementById('stat-total-count').textContent = `${batches.length}건`;
         }
 
-        // 개별 주문차수 상태 변경
         window.changeBatchStatus = async function(orderId, batchIndex, newStatus) {
             try {
                 const orderRef = ref(db, `orders/${orderId}`);
 
-                const currentSnapshot = await new Promise((resolve, reject) => {
+                const currentSnapshot = await new Promise((resolve) => {
                     onValue(orderRef, resolve, { onlyOnce: true });
                 });
 
@@ -393,7 +325,6 @@
                     acknowledged: true
                 };
 
-                // 전체 주문의 상태도 현재 남아있는 가장 진행 중인 상태에 맞춥니다.
                 let overallStatus = "주문 접수 중";
                 if (batches.some(b => b.status === "요리 중")) {
                     overallStatus = "요리 중";
@@ -411,18 +342,61 @@
             }
         };
 
-        // 테이블 전체 결제 완료/퇴장
         window.completeTable = async function(orderId) {
             try {
                 const orderRef = ref(db, `orders/${orderId}`);
+                const completedAt = new Date().toISOString();
+
                 await update(orderRef, {
                     status: "결제 완료",
+                    completedAt: completedAt,
                     isHighlighted: false
                 });
+
+                // 🔥 삭제 로직이 중복 생성되던 오류 수정 (setTimeout 부분 제거됨)
             } catch (e) {
                 alert(`결제 완료 처리 실패: ${e.message}`);
             }
         };
+
+        // 🔥 오류 수정 및 최적화된 자동 삭제 함수
+        function scheduleExistingCompletedOrders(allOrdersData) {
+            if (!allOrdersData) return;
+            const now = Date.now();
+
+            for (const key in allOrdersData) {
+                const order = allOrdersData[key];
+
+                if (order.status !== "결제 완료") continue;
+                if (scheduledDeletions.has(key)) continue; // 이미 삭제 타이머가 작동 중이면 무시
+
+                const completedTime = order.completedAt ? new Date(order.completedAt).getTime() : null;
+                if (!completedTime) continue;
+
+                scheduledDeletions.add(key); // 타이머 중복 실행 방지 등록
+
+                const remaining = DELETE_DELAY_MS - (now - completedTime);
+
+                if (remaining <= 0) {
+                    remove(ref(db, `orders/${key}`)).catch(e => console.warn(e));
+                } else {
+                    setTimeout(async () => {
+                        try {
+                            const latestSnapshot = await new Promise((resolve) => {
+                                onValue(ref(db, `orders/${key}`), resolve, { onlyOnce: true });
+                            });
+
+                            if (latestSnapshot.exists() && latestSnapshot.val().status === "결제 완료") {
+                                await remove(ref(db, `orders/${key}`));
+                            }
+                            scheduledDeletions.delete(key);
+                        } catch (e) {
+                            console.warn("결제 완료 주문 자동 삭제 실패:", e);
+                        }
+                    }, remaining);
+                }
+            }
+        }
 
         window.deleteOrder = async function(orderId) {
             if (confirm("정말로 이 주문을 취소/삭제하시겠습니까?")) {
@@ -437,5 +411,3 @@
 
         listenToOrders();
     </script>
-</body>
-</html>
