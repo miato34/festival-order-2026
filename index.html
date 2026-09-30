@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -63,7 +63,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getDatabase, ref, onValue, update, remove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+        import { getDatabase, ref, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAh7xMGv5-J8pQ4iRKMUdgwYWjHl-EyLo8",
@@ -412,17 +412,139 @@
         };
 
         // 테이블 전체 결제 완료/퇴장
+        // 결제 버튼이 확실하게 동작하도록 get()으로 현재 주문을 먼저 읽은 뒤 update()합니다.
+        // 첫 주문 후 2시간까지는 추가 자릿세 없음
+        // 2시간 초과분은 1시간당 1인 1,500원
+        // 결제 완료 후 3분 뒤 자동 삭제
         window.completeTable = async function(orderId) {
             try {
+                if (!orderId) {
+                    alert("주문 번호를 찾을 수 없습니다.");
+                    return;
+                }
+
                 const orderRef = ref(db, `orders/${orderId}`);
+                const snapshot = await get(orderRef);
+
+                if (!snapshot.exists()) {
+                    alert("이미 삭제된 주문입니다.");
+                    return;
+                }
+
+                const order = snapshot.val();
+
+                if (order.status === "결제 완료") {
+                    return;
+                }
+
+                const startTime = order.startTime || order.timestamp;
+                const startMs = new Date(startTime).getTime();
+
+                if (!Number.isFinite(startMs)) {
+                    throw new Error("첫 주문 시간을 확인할 수 없습니다.");
+                }
+
+                const elapsedMs = Math.max(0, Date.now() - startMs);
+                const twoHours = 2 * 60 * 60 * 1000;
+                const oneHour = 60 * 60 * 1000;
+
+                const overtimeHours = elapsedMs > twoHours
+                    ? Math.ceil((elapsedMs - twoHours) / oneHour)
+                    : 0;
+
+                const partySize = Number(order.partySize) || 0;
+                const overtimeCharge = overtimeHours * 1500 * partySize;
+                const originalTotal = Number(order.totalPrice) || 0;
+                const finalTotal = originalTotal + overtimeCharge;
+                const completedAt = new Date().toISOString();
+
                 await update(orderRef, {
                     status: "결제 완료",
-                    isHighlighted: false
+                    isHighlighted: false,
+                    completedAt: completedAt,
+                    overtimeHours: overtimeHours,
+                    overtimeCharge: overtimeCharge,
+                    finalTotal: finalTotal,
+                    totalPrice: finalTotal
                 });
+
+                alert(
+                    `결제 완료\n\n` +
+                    `기본 금액: ${originalTotal.toLocaleString()}원\n` +
+                    `추가 자릿세: ${overtimeCharge.toLocaleString()}원\n` +
+                    `최종 금액: ${finalTotal.toLocaleString()}원`
+                );
+
+                // 결제 완료 후 3분 뒤 자동 삭제
+                setTimeout(async () => {
+                    try {
+                        const latest = await get(orderRef);
+                        if (!latest.exists()) return;
+
+                        const latestOrder = latest.val();
+                        if (
+                            latestOrder.status === "결제 완료" &&
+                            latestOrder.completedAt === completedAt
+                        ) {
+                            await remove(orderRef);
+                        }
+                    } catch (e) {
+                        console.error("3분 후 자동 삭제 실패:", e);
+                    }
+                }, 3 * 60 * 1000);
+
             } catch (e) {
-                alert(`결제 완료 처리 실패: ${e.message}`);
+                console.error("결제 완료 처리 실패:", e);
+                alert(`결제 완료 처리 실패: ${e.message || e}`);
             }
         };
+
+        // 페이지를 새로고침해도 결제 완료 주문의 3분 자동 삭제가 유지되도록
+        // completedAt을 기준으로 남은 시간을 다시 계산합니다.
+        async function cleanupCompletedOrders() {
+            try {
+                const snapshot = await get(ref(db, 'orders'));
+                if (!snapshot.exists()) return;
+
+                const allOrders = snapshot.val();
+                const cleanupDelay = 3 * 60 * 1000;
+
+                for (const orderId in allOrders) {
+                    const order = allOrders[orderId];
+                    if (order.status !== "결제 완료" || !order.completedAt) continue;
+
+                    const completedMs = new Date(order.completedAt).getTime();
+                    if (!Number.isFinite(completedMs)) continue;
+
+                    const remaining = cleanupDelay - (Date.now() - completedMs);
+                    const orderRef = ref(db, `orders/${orderId}`);
+
+                    const removeIfStillCompleted = async () => {
+                        try {
+                            const latest = await get(orderRef);
+                            if (!latest.exists()) return;
+                            const latestOrder = latest.val();
+                            if (
+                                latestOrder.status === "결제 완료" &&
+                                latestOrder.completedAt === order.completedAt
+                            ) {
+                                await remove(orderRef);
+                            }
+                        } catch (e) {
+                            console.error("완료 주문 자동 삭제 실패:", e);
+                        }
+                    };
+
+                    if (remaining <= 0) {
+                        await removeIfStillCompleted();
+                    } else {
+                        setTimeout(removeIfStillCompleted, remaining);
+                    }
+                }
+            } catch (e) {
+                console.error("완료 주문 정리 확인 실패:", e);
+            }
+        }
 
         window.deleteOrder = async function(orderId) {
             if (confirm("정말로 이 주문을 취소/삭제하시겠습니까?")) {
@@ -435,10 +557,12 @@
             }
         };
 
+        cleanupCompletedOrders();
         listenToOrders();
     </script>
 </body>
 </html>
+
 
 
         listenToOrders();
