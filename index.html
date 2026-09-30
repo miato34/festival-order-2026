@@ -182,6 +182,7 @@
         function getBatchStatus(order, batch, idx) {
             if (batch.status) return batch.status;
             if (idx === 0) return order.status || "주문 접수 중";
+            if (idx > 0 && batch.acknowledged !== true) return "주문 접수 중";
             if (batch.acknowledged === false) return "주문 접수 중";
             return order.status || "주문 접수 중";
         }
@@ -198,6 +199,7 @@
         }
 
         // 실시간 주문 수신
+        // 같은 테이블의 1차/2차/3차 주문은 하나의 카드로 묶어서 표시합니다.
         function listenToOrders() {
             if (unsubscribeOrders) unsubscribeOrders();
 
@@ -215,142 +217,169 @@
                 }
 
                 const allOrdersData = snapshot.val();
-                const batches = [];
+                const orders = [];
 
                 for (const key in allOrdersData) {
                     const order = { id: key, ...allOrdersData[key] };
 
                     if (order.festivalDay !== currentActiveDay) continue;
 
+                    // 결제 완료된 주문도 화면에 남겨두고 회색으로 표시합니다.
+
                     if (order.orderBatches && order.orderBatches.length > 0) {
-                        order.orderBatches.forEach((batch, idx) => {
-                            batches.push({
-                                order,
-                                batch,
-                                batchIndex: idx,
-                                batchKey: `${order.id}-${idx}`
-                            });
-                        });
+                        orders.push(order);
                     } else if (order.items) {
                         // 구버전 주문 데이터 호환
-                        batches.push({
-                            order,
-                            batch: {
-                                items: order.items,
-                                status: order.status,
-                                timestamp: order.timestamp,
-                                acknowledged: true
-                            },
-                            batchIndex: 0,
-                            batchKey: `${order.id}-legacy`
-                        });
+                        order.orderBatches = [{
+                            items: order.items,
+                            status: order.status,
+                            timestamp: order.timestamp,
+                            acknowledged: true
+                        }];
+                        orders.push(order);
                     }
                 }
 
-                // 최신 주문이 먼저
-                batches.sort((a, b) =>
-                    new Date(getBatchTime(b.order, b.batch)) -
-                    new Date(getBatchTime(a.order, a.batch))
-                );
+                // 가장 최근 주문이 먼저 오도록 정렬
+                orders.sort((a, b) => {
+                    const aTime = a.orderBatches?.[a.orderBatches.length - 1]?.timestamp || a.timestamp;
+                    const bTime = b.orderBatches?.[b.orderBatches.length - 1]?.timestamp || b.timestamp;
+                    return new Date(bTime) - new Date(aTime);
+                });
 
-                const currentKeys = new Set(batches.map(x => x.batchKey));
+                // 새 주문/추가 주문 감지용 키
+                const currentKeys = new Set();
+                orders.forEach(order => {
+                    (order.orderBatches || []).forEach((batch, idx) => {
+                        currentKeys.add(`${order.id}-${idx}`);
+                    });
+                });
 
-                // 초기 로딩 이후 새로 생긴 주문/추가 주문만 알림
                 if (initialized) {
                     const newKeys = [...currentKeys].filter(key => !knownBatchKeys.has(key));
-                    if (newKeys.length > 0) {
-                        playNewOrderSound();
-                    }
+                    if (newKeys.length > 0) playNewOrderSound();
                 }
 
                 knownBatchKeys = currentKeys;
                 initialized = true;
 
-                updateStats(batches);
+                updateStats(orders);
 
-                if (batches.length === 0) {
+                if (orders.length === 0) {
                     container.innerHTML = `<p class="text-gray-400 col-span-full text-center py-10">${currentActiveDay.toUpperCase()}에 접수된 주문이 없습니다.</p>`;
                     return;
                 }
 
-                batches.forEach(({ order, batch, batchIndex, batchKey }) => {
-                    const card = createOrderCard(order, batch, batchIndex, batchKey);
+                // 테이블별로 1개의 카드만 생성하고, 그 안에 1차/2차/3차 주문을 이어서 표시
+                orders.forEach(order => {
+                    const card = createOrderCard(order);
                     container.appendChild(card);
                 });
             });
         }
 
-        function createOrderCard(order, batch, batchIndex, batchKey) {
+        function createOrderCard(order) {
             const card = document.createElement('div');
-            card.className = "bg-gray-800 rounded-lg p-2.5 border border-gray-700 shadow-md flex flex-col justify-between new-order";
-            card.dataset.batchKey = batchKey;
+            const isCompleted = order.status === "결제 완료";
+            card.className = isCompleted
+                ? "bg-gray-700 rounded-lg p-2.5 border border-gray-600 shadow-md flex flex-col justify-between opacity-60"
+                : "bg-gray-800 rounded-lg p-2.5 border border-gray-700 shadow-md flex flex-col justify-between new-order";
+            card.dataset.orderId = order.id;
 
-            const status = getBatchStatus(order, batch, batchIndex);
-            const statusBadgeColor = getStatusClass(status);
-            const timeStr = new Date(getBatchTime(order, batch)).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            const batches = order.orderBatches || [];
+            const firstBatch = batches[0] || {};
+            const latestBatch = batches[batches.length - 1] || firstBatch;
+            const firstTime = firstBatch.timestamp || order.startTime || order.timestamp;
 
-            const isAdditional = batchIndex > 0;
-            const batchLabel = isAdditional ? "추가 주문" : "첫 주문";
+            let batchSectionsHtml = '';
 
-            let batchTotal = 0;
-            let itemsHtml = '';
+            batches.forEach((batch, batchIndex) => {
+                // 추가 주문은 무조건 새로 접수된 상태로 시작합니다.
+                // 따라서 1차 주문이 이미 서빙 완료여도 2차 주문은 '주문 접수 중'으로 표시됩니다.
+                const status = isCompleted ? "결제 완료" : getBatchStatus(order, batch, batchIndex);
+                const statusBadgeColor = isCompleted ? "bg-gray-500 text-gray-100" : getStatusClass(status);
+                const timeStr = new Date(getBatchTime(order, batch)).toLocaleTimeString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                const isAdditional = batchIndex > 0;
+                const batchLabel = isAdditional ? `${batchIndex + 1}차 추가 주문` : '1차 주문';
 
-            (batch.items || []).forEach(item => {
-                const itemTotal = item.price * item.quantity;
-                batchTotal += itemTotal;
-                itemsHtml += `
-                    <li class="flex justify-between gap-1 text-xs leading-4">
-                        <span class="font-medium text-gray-200 break-words">${item.name} x ${item.quantity}</span>
-                        <span class="text-gray-500 whitespace-nowrap">${itemTotal.toLocaleString()}원</span>
-                    </li>`;
+                let batchTotal = 0;
+                let itemsHtml = '';
+
+                (batch.items || []).forEach(item => {
+                    const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+                    batchTotal += itemTotal;
+                    itemsHtml += `
+                        <li class="flex justify-between gap-1 text-xs leading-4">
+                            <span class="font-medium text-gray-200 break-words">${item.name} x ${item.quantity}</span>
+                            <span class="text-gray-500 whitespace-nowrap">${itemTotal.toLocaleString()}원</span>
+                        </li>`;
+                });
+
+                batchSectionsHtml += `
+                    <div class="${batchIndex > 0 ? 'mt-2 pt-2 border-t border-gray-700' : ''}">
+                        <div class="flex justify-between items-center gap-1 mb-1">
+                            <div class="text-[10px] ${isAdditional ? 'text-orange-300' : 'text-indigo-300'} font-bold">
+                                ${batchLabel} · ${timeStr}
+                            </div>
+                            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusBadgeColor}">
+                                ${status}
+                            </span>
+                        </div>
+
+                        <div class="${isCompleted ? 'bg-gray-800' : 'bg-gray-900'} rounded-md p-2">
+                            <ul class="space-y-1">
+                                ${itemsHtml}
+                            </ul>
+                        </div>
+
+                        <div class="flex justify-between items-center mt-1.5">
+                            <span class="text-[10px] text-gray-500">이번 주문</span>
+                            <span class="text-sm font-black text-green-400">${batchTotal.toLocaleString()}원</span>
+                        </div>
+
+                        ${!isCompleted ? `
+                        <div class="grid grid-cols-2 gap-1 mt-1.5">
+                            <button type="button" onclick="changeBatchStatus('${order.id}', ${batchIndex}, '요리 중')"
+                                class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 rounded text-[10px]">
+                                요리 중
+                            </button>
+                            <button type="button" onclick="changeBatchStatus('${order.id}', ${batchIndex}, '서빙 완료')"
+                                class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 rounded text-[10px]">
+                                서빙 완료
+                            </button>
+                        </div>` : ''}
+                    </div>`;
             });
 
             card.innerHTML = `
                 <div>
-                    <div class="flex justify-between items-start gap-1 mb-1">
+                    <div class="flex justify-between items-start gap-1 mb-1.5">
                         <div>
                             <div class="text-lg font-black text-yellow-300 leading-5">테이블 ${order.tableNumber}번</div>
-                            <div class="text-[10px] ${isAdditional ? 'text-orange-300' : 'text-indigo-300'} font-bold mt-0.5">
-                                ${batchLabel}
+                            <div class="text-[10px] text-gray-500 mt-0.5">
+                                첫 주문 ${new Date(firstTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                · ${batches.length}차 주문
                             </div>
                         </div>
-                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusBadgeColor}">
-                            ${status}
-                        </span>
                     </div>
 
-                    <p class="text-[10px] text-gray-500 mb-1.5">${timeStr}</p>
-
-                    <div class="bg-gray-900 rounded-md p-2">
-                        <ul class="space-y-1">
-                            ${itemsHtml}
-                        </ul>
-                    </div>
-
-                    <div class="flex justify-between items-center mt-1.5 pt-1.5 border-t border-gray-700">
-                        <span class="text-[10px] text-gray-500">이번 주문</span>
-                        <span class="text-sm font-black text-green-400">${batchTotal.toLocaleString()}원</span>
-                    </div>
+                    ${batchSectionsHtml}
                 </div>
 
-                <div class="grid grid-cols-2 gap-1 mt-2 pt-2 border-t border-gray-700">
-                    <button onclick="changeBatchStatus('${order.id}', ${batchIndex}, '요리 중')"
-                        class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 rounded text-[10px]">
-                        요리 중
-                    </button>
-                    <button onclick="changeBatchStatus('${order.id}', ${batchIndex}, '서빙 완료')"
-                        class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 rounded text-[10px]">
-                        서빙 완료
-                    </button>
-                    <button onclick="completeTable('${order.id}')"
-                        class="bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 rounded text-[10px] col-span-2">
+                <div class="grid grid-cols-1 gap-1 mt-2 pt-2 border-t border-gray-700">
+                    ${isCompleted ? `
+                    <div class="bg-gray-600 text-gray-100 font-bold py-2 rounded text-[10px] text-center">
                         결제 완료 · 퇴장
-                    </button>
-                    <button onclick="deleteOrder('${order.id}')"
-                        class="bg-red-950 hover:bg-red-900 text-red-200 py-1 rounded text-[9px] col-span-2">
+                    </div>` : `
+                    <button type="button" onclick="completeTable('${order.id}')"
+                        class="bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 rounded text-[10px]">
+                        결제 완료 · 퇴장
+                    </button>`}
+                    <button type="button" onclick="deleteOrder('${order.id}')"
+                        class="bg-red-950 hover:bg-red-900 text-red-200 py-1 rounded text-[9px]">
                         주문 취소/삭제
                     </button>
                 </div>
@@ -359,16 +388,23 @@
             return card;
         }
 
-        function updateStats(batches) {
-            const pending = batches.filter(x => getBatchStatus(x.order, x.batch, x.batchIndex) === "주문 접수 중").length;
-            const cooking = batches.filter(x => {
-                const status = getBatchStatus(x.order, x.batch, x.batchIndex);
-                return status === "요리 중" || status === "서빙 완료";
-            }).length;
+        function updateStats(orders) {
+            let pending = 0;
+            let cooking = 0;
+            let totalBatches = 0;
+
+            orders.forEach(order => {
+                (order.orderBatches || []).forEach((batch, idx) => {
+                    const status = getBatchStatus(order, batch, idx);
+                    totalBatches++;
+                    if (status === '주문 접수 중') pending++;
+                    if (status === '요리 중' || status === '서빙 완료') cooking++;
+                });
+            });
 
             document.getElementById('stat-pending').textContent = `${pending}건`;
             document.getElementById('stat-cooking').textContent = `${cooking}건`;
-            document.getElementById('stat-total-count').textContent = `${batches.length}건`;
+            document.getElementById('stat-total-count').textContent = `${totalBatches}건`;
         }
 
         // 개별 주문차수 상태 변경
@@ -412,10 +448,10 @@
         };
 
         // 테이블 전체 결제 완료/퇴장
-        // 결제 버튼이 확실하게 동작하도록 get()으로 현재 주문을 먼저 읽은 뒤 update()합니다.
+        // 결제하면 해당 주문은 회색으로 남겨두고, 이후 같은 테이블에서 새 주문이 들어오면
+        // 새로운 주문 데이터로 별도의 새 카드가 만들어집니다.
         // 첫 주문 후 2시간까지는 추가 자릿세 없음
         // 2시간 초과분은 1시간당 1인 1,500원
-        // 결제 완료 후 3분 뒤 자동 삭제
         window.completeTable = async function(orderId) {
             try {
                 if (!orderId) {
@@ -433,9 +469,7 @@
 
                 const order = snapshot.val();
 
-                if (order.status === "결제 완료") {
-                    return;
-                }
+                if (order.status === "결제 완료") return;
 
                 const startTime = order.startTime || order.timestamp;
                 const startMs = new Date(startTime).getTime();
@@ -447,7 +481,6 @@
                 const elapsedMs = Math.max(0, Date.now() - startMs);
                 const twoHours = 2 * 60 * 60 * 1000;
                 const oneHour = 60 * 60 * 1000;
-
                 const overtimeHours = elapsedMs > twoHours
                     ? Math.ceil((elapsedMs - twoHours) / oneHour)
                     : 0;
@@ -456,12 +489,11 @@
                 const overtimeCharge = overtimeHours * 1500 * partySize;
                 const originalTotal = Number(order.totalPrice) || 0;
                 const finalTotal = originalTotal + overtimeCharge;
-                const completedAt = new Date().toISOString();
 
                 await update(orderRef, {
                     status: "결제 완료",
                     isHighlighted: false,
-                    completedAt: completedAt,
+                    completedAt: new Date().toISOString(),
                     overtimeHours: overtimeHours,
                     overtimeCharge: overtimeCharge,
                     finalTotal: finalTotal,
@@ -474,77 +506,11 @@
                     `추가 자릿세: ${overtimeCharge.toLocaleString()}원\n` +
                     `최종 금액: ${finalTotal.toLocaleString()}원`
                 );
-
-                // 결제 완료 후 3분 뒤 자동 삭제
-                setTimeout(async () => {
-                    try {
-                        const latest = await get(orderRef);
-                        if (!latest.exists()) return;
-
-                        const latestOrder = latest.val();
-                        if (
-                            latestOrder.status === "결제 완료" &&
-                            latestOrder.completedAt === completedAt
-                        ) {
-                            await remove(orderRef);
-                        }
-                    } catch (e) {
-                        console.error("3분 후 자동 삭제 실패:", e);
-                    }
-                }, 3 * 60 * 1000);
-
             } catch (e) {
                 console.error("결제 완료 처리 실패:", e);
                 alert(`결제 완료 처리 실패: ${e.message || e}`);
             }
         };
-
-        // 페이지를 새로고침해도 결제 완료 주문의 3분 자동 삭제가 유지되도록
-        // completedAt을 기준으로 남은 시간을 다시 계산합니다.
-        async function cleanupCompletedOrders() {
-            try {
-                const snapshot = await get(ref(db, 'orders'));
-                if (!snapshot.exists()) return;
-
-                const allOrders = snapshot.val();
-                const cleanupDelay = 3 * 60 * 1000;
-
-                for (const orderId in allOrders) {
-                    const order = allOrders[orderId];
-                    if (order.status !== "결제 완료" || !order.completedAt) continue;
-
-                    const completedMs = new Date(order.completedAt).getTime();
-                    if (!Number.isFinite(completedMs)) continue;
-
-                    const remaining = cleanupDelay - (Date.now() - completedMs);
-                    const orderRef = ref(db, `orders/${orderId}`);
-
-                    const removeIfStillCompleted = async () => {
-                        try {
-                            const latest = await get(orderRef);
-                            if (!latest.exists()) return;
-                            const latestOrder = latest.val();
-                            if (
-                                latestOrder.status === "결제 완료" &&
-                                latestOrder.completedAt === order.completedAt
-                            ) {
-                                await remove(orderRef);
-                            }
-                        } catch (e) {
-                            console.error("완료 주문 자동 삭제 실패:", e);
-                        }
-                    };
-
-                    if (remaining <= 0) {
-                        await removeIfStillCompleted();
-                    } else {
-                        setTimeout(removeIfStillCompleted, remaining);
-                    }
-                }
-            } catch (e) {
-                console.error("완료 주문 정리 확인 실패:", e);
-            }
-        }
 
         window.deleteOrder = async function(orderId) {
             if (confirm("정말로 이 주문을 취소/삭제하시겠습니까?")) {
@@ -557,13 +523,7 @@
             }
         };
 
-        cleanupCompletedOrders();
         listenToOrders();
     </script>
 </body>
 </html>
-
-
-
-        listenToOrders();
-    </script>
