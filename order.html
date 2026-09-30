@@ -35,7 +35,7 @@
 
     <div class="bg-white p-6 rounded-xl shadow-md mb-6 fade-in">
         <label for="table-number" class="block text-lg font-semibold text-gray-800 mb-2">테이블 번호</label>
-        <input type="number" id="table-number" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="1~26번 테이블을 입력하세요" min="1" max="26">
+        <input type="number" id="table-number" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="1~30번 테이블을 입력하세요" min="1" max="30">
     </div>
 
     <div id="menu-section" class="space-y-4 fade-in" style="animation-delay: 0.1s;">
@@ -247,8 +247,8 @@
         }
 
         const parsedTableNumber = parseInt(tableNumber, 10);
-        if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1 || parsedTableNumber > 26) {
-            showAlert("입력 오류", "테이블 번호는 1번부터 26번까지 입력해주세요.");
+        if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1 || parsedTableNumber > 30) {
+            showAlert("입력 오류", "테이블 번호는 1번부터 30번까지 입력해주세요.");
             submitOrderBtn.disabled = false; return;
         }
 
@@ -275,7 +275,7 @@
             }
 
             if (existingOrderKey && existingData) {
-                const newBatch = { acknowledged: false, items: newItems };
+                const newBatch = { acknowledged: false, status: "주문 접수 중", items: newItems };
                 const existingBatches = existingData.orderBatches || [{ acknowledged: true, items: existingData.items || [] }];
                 const updatedBatches = [...existingBatches, newBatch];
                 const newTotalPrice = updatedBatches.flat().flatMap(batch => batch.items).reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -284,6 +284,7 @@
                 await set(targetRef, {
                     ...existingData,
                     orderBatches: updatedBatches,
+                    status: "주문 접수 중",
                     totalPrice: newTotalPrice,
                     timestamp: new Date().toISOString(),
                     isHighlighted: true,
@@ -291,7 +292,7 @@
                 });
                 showAlert("추가 주문 완료!", "기존 주문에 메뉴가 추가되었습니다.", 2000);
             } else {
-                const firstBatch = { acknowledged: false, items: newItems };
+                const firstBatch = { acknowledged: false, status: "주문 접수 중", items: newItems };
                 const totalPrice = firstBatch.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
                 const newOrderRef = push(ordersRef);
 
@@ -322,7 +323,6 @@
 
 </body>
 </html>
-
 
 
 
