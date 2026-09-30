@@ -1,80 +1,69 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>융융죽겠지 주문</title>
+    <title>주문 관리 - 융융죽겠지</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { 
-            font-family: 'Inter', sans-serif;
-            background-image: url('https://i.imgur.com/hiVFR2Z.png');
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-            background-position: center;
-        }
-        .fade-in { animation: fadeIn 0.5s ease-in-out; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        body { font-family: 'Inter', sans-serif; }
+        .new-order { animation: newOrder 0.7s ease-out; }
+        @keyframes newOrder {
+            0% { transform: scale(0.96); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 1; }
         }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-900 text-white min-h-screen p-3">
 
-    <div class="container mx-auto max-w-lg p-4">
-        <header class="text-center my-6">
-            <div class="text-yellow-400 text-1g" style="text-shadow: 1px 1px 3px black;">★★★★&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;★★★★</div>
-            <h2 class="text-2xl font-bold text-red-500 tracking-wider" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.5);">스마트제조융합전공 주점</h2>
-            <h1 class="text-5xl font-extrabold text-blue-600 mt-2" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">융융<span class="text-white">죽겠지</span></h1>
-            <p class="text-white mt-3" style="text-shadow: 1px 1px 3px black;">간편하게 주문하세요!</p>
+    <div class="max-w-screen-2xl mx-auto">
+        <header class="flex flex-col xl:flex-row justify-between items-center mb-4 pb-3 border-b border-gray-700">
+            <div>
+                <h1 class="text-2xl font-extrabold text-yellow-400">융융죽겠지 🍻 주문 관리</h1>
+                <p class="text-gray-400 text-xs mt-1">실시간 주문 현황</p>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-center gap-2 mt-3 xl:mt-0">
+                <button id="sound-enable"
+                    class="bg-green-700 hover:bg-green-600 text-white px-3 py-2 rounded-lg font-bold text-xs">
+                    🔊 알림음 켜기
+                </button>
+
+                <div id="day-tabs" class="flex gap-1">
+                    <button data-day="day1" class="day-tab bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500">Day 1 (9/30)</button>
+                    <button data-day="day2" class="day-tab bg-gray-700 text-gray-300 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500">Day 2 (10/1)</button>
+                    <button data-day="day3" class="day-tab bg-gray-700 text-gray-300 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500">Day 3 (10/2)</button>
+                </div>
+            </div>
         </header>
 
-        <div class="bg-white p-6 rounded-xl shadow-md mb-6 fade-in">
-            <label for="table-number" class="block text-lg font-semibold text-gray-800 mb-2">테이블 번호</label>
-            <input type="number" id="table-number" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="1~26번 테이블을 입력하세요" min="1" max="26">
-        </div>
-
-        <div id="menu-section" class="space-y-4 fade-in" style="animation-delay: 0.1s;">
-             <h2 class="text-2xl font-bold text-white mb-4">메뉴판</h2>
-            <template id="menu-item-template">
-                <div class="bg-white p-4 rounded-xl shadow-md flex items-center justify-between">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-900"></h3>
-                        <p class="text-gray-600 font-medium"></p>
-                    </div>
-                    <div class="flex items-center space-x-3">
-                        <button class="quantity-change bg-gray-200 text-gray-800 rounded-full w-8 h-8 text-lg font-bold hover:bg-gray-300">-</button>
-                        <span class="quantity text-lg font-semibold w-8 text-center">0</span>
-                        <button class="quantity-change bg-indigo-500 text-white rounded-full w-8 h-8 text-lg font-bold hover:bg-indigo-600">+</button>
-                    </div>
-                </div>
-            </template>
-        </div>
-
-        <div id="order-summary" class="mt-8 bg-white p-6 rounded-xl shadow-lg sticky bottom-4 fade-in" style="animation-delay: 0.2s;">
-            <h3 class="text-xl font-bold text-gray-800 mb-4">주문 내역</h3>
-            <div id="cart-items" class="space-y-2 mb-4"><p class="text-gray-500">장바구니가 비어있습니다.</p></div>
-            <div class="border-t pt-4 flex justify-between items-center">
-                <span class="text-xl font-bold text-gray-900">총 금액:</span>
-                <span id="total-price" class="text-2xl font-bold text-indigo-600">0원</span>
+        <!-- 총 매출은 표시하지 않음 -->
+        <div class="grid grid-cols-3 gap-2 mb-4">
+            <div class="bg-gray-800 p-2 rounded-lg border border-gray-700 text-center">
+                <p class="text-gray-400 text-xs">접수 중</p>
+                <p id="stat-pending" class="text-xl font-bold text-red-400 mt-1">0건</p>
             </div>
-            <button id="submit-order" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-lg mt-4 hover:bg-indigo-700 disabled:bg-gray-400">주문하기</button>
+            <div class="bg-gray-800 p-2 rounded-lg border border-gray-700 text-center">
+                <p class="text-gray-400 text-xs">요리/서빙 중</p>
+                <p id="stat-cooking" class="text-xl font-bold text-yellow-400 mt-1">0건</p>
+            </div>
+            <div class="bg-gray-800 p-2 rounded-lg border border-gray-700 text-center">
+                <p class="text-gray-400 text-xs">총 주문</p>
+                <p id="stat-total-count" class="text-xl font-bold text-blue-400 mt-1">0건</p>
+            </div>
         </div>
-    </div>
 
-    <div id="alert-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white p-8 rounded-xl shadow-2xl text-center fade-in">
-            <h2 id="alert-title" class="text-2xl font-bold text-red-500 mb-4"></h2>
-            <p id="alert-message" class="text-gray-700"></p>
+        <!-- 한 화면에 더 많이 보이도록 카드 크기 축소 + 최대 6열 -->
+        <div id="orders-container"
+             class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+            <p id="loading-msg" class="text-gray-400 col-span-full text-center py-10">주문 데이터를 불러오는 중입니다...</p>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getDatabase, ref, push, set, get } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+        import { getDatabase, ref, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAh7xMGv5-J8pQ4iRKMUdgwYWjHl-EyLo8",
@@ -87,239 +76,458 @@
             measurementId: "G-ZS4777HWQ1"
         };
 
-        const submitOrderBtn = document.getElementById('submit-order');
-
-        function showAlert(title, message, duration = 2000) {
-            document.getElementById('alert-title').textContent = title;
-            document.getElementById('alert-message').textContent = message;
-            const modal = document.getElementById('alert-modal');
-            modal.classList.remove('hidden');
-            if(duration > 0) setTimeout(() => modal.classList.add('hidden'), duration);
-        }
-
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        let configData = null;
 
-        function fetchConfig() {
-            const todayStr = new Date().toISOString().split('T')[0];
-            let currentDay = "day1";
-            if (todayStr === "2026-10-01") currentDay = "day2";
-            else if (todayStr === "2026-10-02") currentDay = "day3";
+        let currentActiveDay = "day1";
+        let unsubscribeOrders = null;
 
-            configData = {
-                activeDay: currentDay,
-                dayTabs: [
-                    { day: "day1", date: "2026-09-30" },
-                    { day: "day2", date: "2026-10-01" },
-                    { day: "day3", date: "2026-10-02" }
-                ]
-            };
-            submitOrderBtn.disabled = false;
-        }
-        fetchConfig();
+        // 처음 화면을 불러올 때 기존 주문에는 소리를 내지 않고,
+        // 이후 새 주문/추가 주문이 들어왔을 때만 소리를 냅니다.
+        let initialized = false;
+        let knownBatchKeys = new Set();
 
-        const menuData = [
-            {
-                category: '🪑 자릿세',
-                items: [ { id: 'seat-charge', name: '1인', price: 3000 }]
-            },
-            {
-                category: '🍱 세트메뉴 (1,000원 할인)',
-                items: [
-                    { id: 'set-fried-tteokbokki', name: '후라이드 + 떡볶이', price: 27800 },
-                    { id: 'set-yangnyeom-tteokbokki', name: '양념 + 떡볶이', price: 28800 },
-                    { id: 'set-bburingkle-tteokbokki', name: '뿌링클 + 떡볶이', price: 28800 },
-                ]
-            },
-            {
-                category: '🍗 치킨(순살)',
-                items: [
-                    { id: 'fried-chicken', name: '스제치킨(후라이드)', price: 20900 },
-                    { id: 'yangnyeom-chicken', name: '양념치킨', price: 21900 },
-                    { id: 'supreme-yangnyeom-chicken', name: '뿌링클치킨', price: 21900 },
-                ]
-            },
-            {
-                category: '🍟 사이드',
-                items: [
-                    { id: 'fruit', name: '화채', price: 7900 },
-                    { id: 'tteokbokki', name: '떡볶이', price: 7900 },
-                    { id: 'takoyaki', name: '타꼬야끼', price: 7900 },
-                    { id: 'fries', name: '감자튀김', price: 6900 },
-                    { id: 'zero', name: '펩시제로', price: 2000 },
-                    { id: 'pepsi', name: '펩시', price: 2000 },
-                    { id: 'water', name: '물', price: 1000 },
-                ]
-            },
-            {
-                category: '🙋‍♂️호출',
-                items: [
-                    { id: 'employee', name: '직원 호출', price: 0},
-                    { id: 'snack', name: '과자 리필', price: 0},
-                    { id: 'soju', name: '소주잔', price: 0},
-                    { id: 'glass', name: '종이컵', price: 0},
-                    { id: 'plate', name: '앞접시', price: 0},                        
-                    { id: 'tisue', name: '물티슈', price: 0},
-                    { id: 'spoon', name: '숟가락', price: 0},
-                    { id: 'chap', name: '젓가락', price: 0}
-                ]
-            }
-        ];
+        // 브라우저의 자동재생 제한 때문에 사용자가 한 번 화면을 클릭하면
+        // Web Audio를 활성화합니다.
+        let audioContext = null;
+        let audioUnlocked = false;
 
-        const menuSection = document.getElementById('menu-section');
-        const menuItemTemplate = document.getElementById('menu-item-template');
-        const cart = {};
-    
-        menuSection.innerHTML = '<h2 class="text-2xl font-bold text-white mb-4" style="text-shadow: 1px 1px 3px black;">메뉴판</h2>'; 
-
-        menuData.forEach(categoryInfo => {
-            const categoryTitle = document.createElement('h3');
-            categoryTitle.className = 'text-xl font-bold text-white mt-8 mb-3';
-            categoryTitle.style.textShadow = '1px 1px 3px black';
-            categoryTitle.textContent = categoryInfo.category;
-            menuSection.appendChild(categoryTitle);
-
-            categoryInfo.items.forEach(item => {
-                const clone = menuItemTemplate.content.cloneNode(true);
-                clone.querySelector('h3').textContent = item.name;
-                if (item.price > 0) {
-                    clone.querySelector('p').textContent = `${item.price.toLocaleString()}원`;
-                } else {
-                    clone.querySelector('p').textContent = '';
+        function unlockAudio() {
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 }
-                const [minusBtn, plusBtn] = clone.querySelectorAll('.quantity-change');
-                const quantitySpan = clone.querySelector('.quantity');
-                minusBtn.addEventListener('click', () => updateQuantity(item, -1, quantitySpan));
-                plusBtn.addEventListener('click', () => updateQuantity(item, 1, quantitySpan));
-                menuSection.appendChild(clone);
-                cart[item.id] = { ...item, quantity: 0 };
+                if (audioContext.state === 'suspended') audioContext.resume();
+                audioUnlocked = true;
+                document.getElementById('sound-enable').textContent = '🔊 알림음 켜짐';
+                document.getElementById('sound-enable').classList.remove('bg-green-700');
+                document.getElementById('sound-enable').classList.add('bg-gray-600');
+            } catch (e) {
+                console.warn('알림음 활성화 실패:', e);
+            }
+        }
+
+        function playNewOrderSound() {
+            if (!audioUnlocked || !audioContext) return;
+
+            try {
+                const now = audioContext.currentTime;
+
+                const osc1 = audioContext.createOscillator();
+                const gain1 = audioContext.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(880, now);
+                osc1.frequency.setValueAtTime(1175, now + 0.12);
+                gain1.gain.setValueAtTime(0.0001, now);
+                gain1.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+                gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                osc1.connect(gain1);
+                gain1.connect(audioContext.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.27);
+
+                const osc2 = audioContext.createOscillator();
+                const gain2 = audioContext.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.value = 988;
+                gain2.gain.setValueAtTime(0.0001, now + 0.28);
+                gain2.gain.exponentialRampToValueAtTime(0.25, now + 0.30);
+                gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.53);
+                osc2.connect(gain2);
+                gain2.connect(audioContext.destination);
+                osc2.start(now + 0.28);
+                osc2.stop(now + 0.55);
+            } catch (e) {
+                console.warn('알림음 재생 실패:', e);
+            }
+        }
+
+        document.getElementById('sound-enable').addEventListener('click', () => {
+            unlockAudio();
+            playNewOrderSound();
+        });
+
+        // 화면 아무 곳이나 처음 클릭해도 알림음을 활성화
+        document.addEventListener('click', () => unlockAudio(), { once: true });
+
+        // 날짜 자동 감지
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (todayStr === "2026-10-01") currentActiveDay = "day2";
+        else if (todayStr === "2026-10-02") currentActiveDay = "day3";
+
+        function updateTabUI() {
+            document.querySelectorAll('.day-tab').forEach(btn => {
+                if (btn.dataset.day === currentActiveDay) {
+                    btn.className = "day-tab bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500";
+                } else {
+                    btn.className = "day-tab bg-gray-700 text-gray-300 px-3 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500";
+                }
+            });
+        }
+        updateTabUI();
+
+        document.querySelectorAll('.day-tab').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                currentActiveDay = e.target.dataset.day;
+                updateTabUI();
+                initialized = false;
+                knownBatchKeys = new Set();
+                listenToOrders();
             });
         });
 
-        function updateQuantity(item, change, quantitySpan) {
-            const currentQuantity = cart[item.id].quantity;
-            if (currentQuantity + change >= 0) {
-                cart[item.id].quantity += change;
-                quantitySpan.textContent = cart[item.id].quantity;
-                updateCart();
-            }
+        // 배치의 상태를 가져옵니다.
+        // 기존 데이터에는 batch.status가 없기 때문에 기존 주문은 order.status를 사용하고,
+        // 새로 추가된 미확인 주문은 "주문 접수 중"으로 표시합니다.
+        function getBatchStatus(order, batch, idx) {
+            if (batch.status) return batch.status;
+            if (idx === 0) return order.status || "주문 접수 중";
+            if (idx > 0 && batch.acknowledged !== true) return "주문 접수 중";
+            if (batch.acknowledged === false) return "주문 접수 중";
+            return order.status || "주문 접수 중";
         }
 
-        const cartItemsDiv = document.getElementById('cart-items');
-        const totalPriceSpan = document.getElementById('total-price');
+        function getStatusClass(status) {
+            if (status === "요리 중") return "bg-yellow-500 text-black";
+            if (status === "서빙 완료") return "bg-blue-500 text-white";
+            if (status === "결제 완료") return "bg-green-600 text-white";
+            return "bg-red-500 text-white";
+        }
 
-        function updateCart() {
-            cartItemsDiv.innerHTML = '';
-            let total = 0;
-            let hasItems = false;
-            Object.values(cart).forEach(item => {
-                if (item.quantity > 0) {
-                    hasItems = true;
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'flex justify-between text-gray-800';
-                    const priceText = item.price > 0 ? `<span>${(item.price * item.quantity).toLocaleString()}원</span>` : '<span>-</span>';
-                    itemDiv.innerHTML = `<span>${item.name} x${item.quantity}</span>${priceText}`;
-                    cartItemsDiv.appendChild(itemDiv);
-                    total += item.price * item.quantity;
+        function getBatchTime(order, batch) {
+            return batch.timestamp || order.timestamp;
+        }
+
+        // 실시간 주문 수신
+        // 같은 테이블의 1차/2차/3차 주문은 하나의 카드로 묶어서 표시합니다.
+        function listenToOrders() {
+            if (unsubscribeOrders) unsubscribeOrders();
+
+            const ordersRef = ref(db, 'orders');
+            unsubscribeOrders = onValue(ordersRef, (snapshot) => {
+                const container = document.getElementById('orders-container');
+                container.innerHTML = '';
+
+                if (!snapshot.exists()) {
+                    knownBatchKeys = new Set();
+                    initialized = true;
+                    container.innerHTML = '<p class="text-gray-400 col-span-full text-center py-10">접수된 주문이 없습니다.</p>';
+                    updateStats([]);
+                    return;
                 }
-            });
-            if (!hasItems) cartItemsDiv.innerHTML = '<p class="text-gray-500">장바구니가 비어있습니다.</p>';
-            totalPriceSpan.textContent = `${total.toLocaleString()}원`;
-        }
 
-        submitOrderBtn.addEventListener('click', async () => {
-            submitOrderBtn.disabled = true;
+                const allOrdersData = snapshot.val();
+                const orders = [];
 
-            const activeDayInfo = configData.dayTabs.find(d => d.day === configData.activeDay) || configData.dayTabs[0];
+                for (const key in allOrdersData) {
+                    const order = { id: key, ...allOrdersData[key] };
 
-            const tableNumber = document.getElementById('table-number').value;
-            if (!tableNumber) {
-                showAlert("입력 오류", "테이블 번호를 입력해주세요.");
-                submitOrderBtn.disabled = false; return;
-            }
-            
-            const orderedItems = Object.values(cart).filter(item => item.quantity > 0);
-            if (orderedItems.length === 0) {
-                showAlert("입력 오류", "메뉴를 선택해주세요.");
-                submitOrderBtn.disabled = false; return;
-            }
+                    if (order.festivalDay !== currentActiveDay) continue;
 
-            const parsedTableNumber = parseInt(tableNumber, 10);
-            if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1 || parsedTableNumber > 26) {
-                showAlert("입력 오류", "테이블 번호는 1번부터 26번까지 입력해주세요.");
-                submitOrderBtn.disabled = false; return;
-            }
+                    // 결제 완료된 주문도 화면에 남겨두고 회색으로 표시합니다.
 
-            try {
-                const ordersRef = ref(db, 'orders');
-                const snapshot = await get(ordersRef);
-                const newItems = orderedItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }));
-                
-                let existingOrderKey = null;
-                let existingData = null;
-
-                if (snapshot.exists()) {
-                    const allOrders = snapshot.val();
-                    for (const key in allOrders) {
-                        const order = allOrders[key];
-                        if (order.tableNumber === parsedTableNumber && 
-                            order.festivalDay === activeDayInfo.day && 
-                            ["주문 접수 중", "요리 중", "서빙 완료"].includes(order.status)) {
-                            existingOrderKey = key;
-                            existingData = order;
-                            break;
-                        }
+                    if (order.orderBatches && order.orderBatches.length > 0) {
+                        orders.push(order);
+                    } else if (order.items) {
+                        // 구버전 주문 데이터 호환
+                        order.orderBatches = [{
+                            items: order.items,
+                            status: order.status,
+                            timestamp: order.timestamp,
+                            acknowledged: true
+                        }];
+                        orders.push(order);
                     }
                 }
 
-                if (existingOrderKey && existingData) {
-                    const newBatch = { acknowledged: false, items: newItems };
-                    const existingBatches = existingData.orderBatches || [{ acknowledged: true, items: existingData.items || [] }];
-                    const updatedBatches = [...existingBatches, newBatch];
-                    const newTotalPrice = updatedBatches.flat().flatMap(batch => batch.items).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                // 가장 최근 주문이 먼저 오도록 정렬
+                orders.sort((a, b) => {
+                    const aTime = a.orderBatches?.[a.orderBatches.length - 1]?.timestamp || a.timestamp;
+                    const bTime = b.orderBatches?.[b.orderBatches.length - 1]?.timestamp || b.timestamp;
+                    return new Date(bTime) - new Date(aTime);
+                });
 
-                    const targetRef = ref(db, `orders/${existingOrderKey}`);
-                    await set(targetRef, {
-                        ...existingData,
-                        orderBatches: updatedBatches,
-                        totalPrice: newTotalPrice,
-                        timestamp: new Date().toISOString(),
-                        isHighlighted: true,
-                        partySize: existingData.partySize || (existingData.orderBatches?.[0]?.items || []).filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0)
+                // 새 주문/추가 주문 감지용 키
+                const currentKeys = new Set();
+                orders.forEach(order => {
+                    (order.orderBatches || []).forEach((batch, idx) => {
+                        currentKeys.add(`${order.id}-${idx}`);
                     });
-                    showAlert("추가 주문 완료!", "기존 주문에 메뉴가 추가되었습니다.", 2000);
-                } else {
-                    const firstBatch = { acknowledged: false, items: newItems };
-                    const totalPrice = firstBatch.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                    const newOrderRef = push(ordersRef);
+                });
 
-                    await set(newOrderRef, {
-                        tableNumber: parsedTableNumber,
-                        orderBatches: [firstBatch],
-                        totalPrice: totalPrice,
-                        status: "주문 접수 중",
-                        timestamp: new Date().toISOString(),
-                        startTime: new Date().toISOString(),
-                        partySize: firstBatch.items.filter(item => item.name === '1인').reduce((sum, item) => sum + (item.quantity || 0), 0),
-                        overtimeChargeApplied: false,
-                        festivalDay: activeDayInfo.day,
-                        isHighlighted: true
-                    });
-                    showAlert("주문 완료!", "주문이 성공적으로 접수되었습니다.", 2000);
+                if (initialized) {
+                    const newKeys = [...currentKeys].filter(key => !knownBatchKeys.has(key));
+                    if (newKeys.length > 0) playNewOrderSound();
                 }
-                
-                setTimeout(() => { window.location.reload(); }, 2100);
 
+                knownBatchKeys = currentKeys;
+                initialized = true;
+
+                updateStats(orders);
+
+                if (orders.length === 0) {
+                    container.innerHTML = `<p class="text-gray-400 col-span-full text-center py-10">${currentActiveDay.toUpperCase()}에 접수된 주문이 없습니다.</p>`;
+                    return;
+                }
+
+                // 테이블별로 1개의 카드만 생성하고, 그 안에 1차/2차/3차 주문을 이어서 표시
+                orders.forEach(order => {
+                    const card = createOrderCard(order);
+                    container.appendChild(card);
+                });
+            });
+        }
+
+        function createOrderCard(order) {
+            const card = document.createElement('div');
+            const isCompleted = order.status === "결제 완료";
+            card.className = isCompleted
+                ? "bg-gray-700 rounded-lg p-2.5 border border-gray-600 shadow-md flex flex-col justify-between opacity-60"
+                : "bg-gray-800 rounded-lg p-2.5 border border-gray-700 shadow-md flex flex-col justify-between new-order";
+            card.dataset.orderId = order.id;
+
+            const batches = order.orderBatches || [];
+            const firstBatch = batches[0] || {};
+            const latestBatch = batches[batches.length - 1] || firstBatch;
+            const firstTime = firstBatch.timestamp || order.startTime || order.timestamp;
+
+            let batchSectionsHtml = '';
+
+            batches.forEach((batch, batchIndex) => {
+                // 추가 주문은 무조건 새로 접수된 상태로 시작합니다.
+                // 따라서 1차 주문이 이미 서빙 완료여도 2차 주문은 '주문 접수 중'으로 표시됩니다.
+                const status = isCompleted ? "결제 완료" : getBatchStatus(order, batch, batchIndex);
+                const statusBadgeColor = isCompleted ? "bg-gray-500 text-gray-100" : getStatusClass(status);
+                const timeStr = new Date(getBatchTime(order, batch)).toLocaleTimeString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                const isAdditional = batchIndex > 0;
+                const batchLabel = isAdditional ? `${batchIndex + 1}차 추가 주문` : '1차 주문';
+
+                let batchTotal = 0;
+                let itemsHtml = '';
+
+                (batch.items || []).forEach(item => {
+                    const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+                    batchTotal += itemTotal;
+                    itemsHtml += `
+                        <li class="flex justify-between gap-1 text-xs leading-4">
+                            <span class="font-medium text-gray-200 break-words">${item.name} x ${item.quantity}</span>
+                            <span class="text-gray-500 whitespace-nowrap">${itemTotal.toLocaleString()}원</span>
+                        </li>`;
+                });
+
+                batchSectionsHtml += `
+                    <div class="${batchIndex > 0 ? 'mt-2 pt-2 border-t border-gray-700' : ''}">
+                        <div class="flex justify-between items-center gap-1 mb-1">
+                            <div class="text-[10px] ${isAdditional ? 'text-orange-300' : 'text-indigo-300'} font-bold">
+                                ${batchLabel} · ${timeStr}
+                            </div>
+                            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusBadgeColor}">
+                                ${status}
+                            </span>
+                        </div>
+
+                        <div class="${isCompleted ? 'bg-gray-800' : 'bg-gray-900'} rounded-md p-2">
+                            <ul class="space-y-1">
+                                ${itemsHtml}
+                            </ul>
+                        </div>
+
+                        <div class="flex justify-between items-center mt-1.5">
+                            <span class="text-[10px] text-gray-500">이번 주문</span>
+                            <span class="text-sm font-black text-green-400">${batchTotal.toLocaleString()}원</span>
+                        </div>
+
+                        ${!isCompleted ? `
+                        <div class="grid grid-cols-2 gap-1 mt-1.5">
+                            <button type="button" onclick="changeBatchStatus('${order.id}', ${batchIndex}, '요리 중')"
+                                class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 rounded text-[10px]">
+                                요리 중
+                            </button>
+                            <button type="button" onclick="changeBatchStatus('${order.id}', ${batchIndex}, '서빙 완료')"
+                                class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 rounded text-[10px]">
+                                서빙 완료
+                            </button>
+                        </div>` : ''}
+                    </div>`;
+            });
+
+            card.innerHTML = `
+                <div>
+                    <div class="flex justify-between items-start gap-1 mb-1.5">
+                        <div>
+                            <div class="text-lg font-black text-yellow-300 leading-5">테이블 ${order.tableNumber}번</div>
+                            <div class="text-[10px] text-gray-500 mt-0.5">
+                                첫 주문 ${new Date(firstTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                · ${batches.length}차 주문
+                            </div>
+                        </div>
+                    </div>
+
+                    ${batchSectionsHtml}
+                </div>
+
+                <div class="grid grid-cols-1 gap-1 mt-2 pt-2 border-t border-gray-700">
+                    ${isCompleted ? `
+                    <div class="bg-gray-600 text-gray-100 font-bold py-2 rounded text-[10px] text-center">
+                        결제 완료 · 퇴장
+                    </div>` : `
+                    <button type="button" onclick="completeTable('${order.id}')"
+                        class="bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 rounded text-[10px]">
+                        결제 완료 · 퇴장
+                    </button>`}
+                    <button type="button" onclick="deleteOrder('${order.id}')"
+                        class="bg-red-950 hover:bg-red-900 text-red-200 py-1 rounded text-[9px]">
+                        주문 취소/삭제
+                    </button>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function updateStats(orders) {
+            let pending = 0;
+            let cooking = 0;
+            let totalBatches = 0;
+
+            orders.forEach(order => {
+                (order.orderBatches || []).forEach((batch, idx) => {
+                    const status = getBatchStatus(order, batch, idx);
+                    totalBatches++;
+                    if (status === '주문 접수 중') pending++;
+                    if (status === '요리 중' || status === '서빙 완료') cooking++;
+                });
+            });
+
+            document.getElementById('stat-pending').textContent = `${pending}건`;
+            document.getElementById('stat-cooking').textContent = `${cooking}건`;
+            document.getElementById('stat-total-count').textContent = `${totalBatches}건`;
+        }
+
+        // 개별 주문차수 상태 변경
+        window.changeBatchStatus = async function(orderId, batchIndex, newStatus) {
+            try {
+                const orderRef = ref(db, `orders/${orderId}`);
+
+                const currentSnapshot = await new Promise((resolve, reject) => {
+                    onValue(orderRef, resolve, { onlyOnce: true });
+                });
+
+                if (!currentSnapshot.exists()) return;
+
+                const order = currentSnapshot.val();
+                const batches = order.orderBatches || [];
+
+                if (!batches[batchIndex]) return;
+
+                batches[batchIndex] = {
+                    ...batches[batchIndex],
+                    status: newStatus,
+                    acknowledged: true
+                };
+
+                // 전체 주문의 상태도 현재 남아있는 가장 진행 중인 상태에 맞춥니다.
+                let overallStatus = "주문 접수 중";
+                if (batches.some(b => b.status === "요리 중")) {
+                    overallStatus = "요리 중";
+                } else if (batches.some(b => b.status === "서빙 완료")) {
+                    overallStatus = "서빙 완료";
+                }
+
+                await update(orderRef, {
+                    orderBatches: batches,
+                    status: overallStatus,
+                    isHighlighted: false
+                });
             } catch (e) {
-                console.error("주문 처리 오류 상세 정보: ", e);
-                showAlert("주문 실패", `오류가 발생했습니다. (${e.message || e.code})`);
-                submitOrderBtn.disabled = false;
+                alert(`상태 변경 실패: ${e.message}`);
             }
-        });
+        };
+
+        // 테이블 전체 결제 완료/퇴장
+        // 결제하면 해당 주문은 회색으로 남겨두고, 이후 같은 테이블에서 새 주문이 들어오면
+        // 새로운 주문 데이터로 별도의 새 카드가 만들어집니다.
+        // 첫 주문 후 2시간까지는 추가 자릿세 없음
+        // 2시간 초과분은 1시간당 1인 1,500원
+        window.completeTable = async function(orderId) {
+            try {
+                if (!orderId) {
+                    alert("주문 번호를 찾을 수 없습니다.");
+                    return;
+                }
+
+                const orderRef = ref(db, `orders/${orderId}`);
+                const snapshot = await get(orderRef);
+
+                if (!snapshot.exists()) {
+                    alert("이미 삭제된 주문입니다.");
+                    return;
+                }
+
+                const order = snapshot.val();
+
+                if (order.status === "결제 완료") return;
+
+                const startTime = order.startTime || order.timestamp;
+                const startMs = new Date(startTime).getTime();
+
+                if (!Number.isFinite(startMs)) {
+                    throw new Error("첫 주문 시간을 확인할 수 없습니다.");
+                }
+
+                const elapsedMs = Math.max(0, Date.now() - startMs);
+                const twoHours = 2 * 60 * 60 * 1000;
+                const oneHour = 60 * 60 * 1000;
+                const overtimeHours = elapsedMs > twoHours
+                    ? Math.ceil((elapsedMs - twoHours) / oneHour)
+                    : 0;
+
+                const partySize = Number(order.partySize) || 0;
+                const overtimeCharge = overtimeHours * 1500 * partySize;
+                const originalTotal = Number(order.totalPrice) || 0;
+                const finalTotal = originalTotal + overtimeCharge;
+
+                await update(orderRef, {
+                    status: "결제 완료",
+                    isHighlighted: false,
+                    completedAt: new Date().toISOString(),
+                    overtimeHours: overtimeHours,
+                    overtimeCharge: overtimeCharge,
+                    finalTotal: finalTotal,
+                    totalPrice: finalTotal
+                });
+
+                alert(
+                    `결제 완료\n\n` +
+                    `기본 금액: ${originalTotal.toLocaleString()}원\n` +
+                    `추가 자릿세: ${overtimeCharge.toLocaleString()}원\n` +
+                    `최종 금액: ${finalTotal.toLocaleString()}원`
+                );
+            } catch (e) {
+                console.error("결제 완료 처리 실패:", e);
+                alert(`결제 완료 처리 실패: ${e.message || e}`);
+            }
+        };
+
+        window.deleteOrder = async function(orderId) {
+            if (confirm("정말로 이 주문을 취소/삭제하시겠습니까?")) {
+                try {
+                    const orderRef = ref(db, `orders/${orderId}`);
+                    await remove(orderRef);
+                } catch (e) {
+                    alert(`삭제 실패: ${e.message}`);
+                }
+            }
+        };
+
+        listenToOrders();
     </script>
 </body>
 </html>
+
 
 
 
